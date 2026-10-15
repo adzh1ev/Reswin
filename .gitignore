@@ -1,0 +1,12 @@
+dist/
+artifacts/
+REQUIREMENTS.md
+design-skills/
+settings.xml
+*.user
+*.tmp
+*.log
+__pycache__/
+.vs/
+.codex/
+.release-state.json
