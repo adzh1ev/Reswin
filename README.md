@@ -43,28 +43,6 @@ Moving a maximized window restores it first. Resize and center actions skip maxi
 
 To control an application running as administrator, Reswin needs the same privilege level. Applications with custom frames, games and shared host processes may behave differently. Mixed-DPI multi-monitor setups still need hardware-specific validation.
 
-## Build
-
-From the project directory in PowerShell:
-
-```powershell
-.\build.ps1
-.\dist\Reswin.exe
-```
-
-The script uses the Windows .NET Framework compiler and does not download dependencies. Visual Studio, the modern .NET SDK, Node.js and Python are not required. `build-icon.ps1` regenerates the multi-size black application icon; ordinary builds use the included ICO.
-
-## Checks
-
-```powershell
-New-Item -ItemType Directory -Path artifacts -Force | Out-Null
-Start-Process .\dist\Reswin.exe -ArgumentList '--self-test', "$PWD\artifacts\self-test.txt" -Wait
-Start-Process .\dist\Reswin.exe -ArgumentList '--ui-checks', "$PWD\artifacts\ui-checks.txt" -Wait
-Get-Content .\artifacts\self-test.txt, .\artifacts\ui-checks.txt
-```
-
-The window checks create a temporary window, exercise Windows API operations and button event sequences, then close it. UI checks cover scrolling, dropdowns, toggles, localization and the embedded icon. They do not simulate physical mouse gestures against arbitrary applications.
-
 ## Source
 
 | Files | Purpose |
