@@ -1,10 +1,29 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 namespace Reswin {
     public enum AppLanguage { Russian, English }
     internal static class L {
         internal static AppLanguage Language=AppLanguage.Russian;
         static readonly Dictionary<string,string> English=new Dictionary<string,string> {
+            {"Действие Reswin не назначено. Кнопка мыши работает как обычно.","No Reswin action is assigned. The mouse button works normally."},
+            {"Удерживайте {0} и эту кнопку мыши, затем двигайте мышь, чтобы переместить окно под указателем.","Hold {0} and this mouse button, then move the mouse to move the window under the pointer."},
+            {"Удерживайте {0} и эту кнопку мыши, затем двигайте мышь, чтобы изменить размер окна под указателем.","Hold {0} and this mouse button, then move the mouse to resize the window under the pointer."},
+            {"Удерживайте {0} и нажмите эту кнопку мыши, чтобы расположить окно под указателем по центру экрана.","Hold {0} and press this mouse button to center the window under the pointer on the screen."},
+            {"Удерживайте {0} и нажмите эту кнопку мыши, чтобы свернуть окно под указателем.","Hold {0} and press this mouse button to minimize the window under the pointer."},
+            {"Удерживайте {0} и нажмите эту кнопку мыши, чтобы развернуть окно под указателем. Повторное нажатие вернёт прежний размер и положение.","Hold {0} and press this mouse button to maximize the window under the pointer. Press again to restore its previous size and position."},
+            {"— Без настройки —","— Unassigned —"},
+            {"Прокрутка","Scrolling"},
+            {"Прокрутка удержанием","Hold to scroll"},
+            {"Левый Alt (авто)","Left Alt (auto)"},
+            {"Левый Ctrl (авто)","Left Ctrl (auto)"},
+            {"Пробел","Space"},
+            {"Удерживайте выбранную клавишу и двигайте мышь вверх или вниз. Дальше от точки старта — быстрее. Отпустите, чтобы остановить. Другой Ctrl/Alt выбирается автоматически.","Hold the selected key and move the mouse up or down. Further from the starting point scrolls faster. Release to stop. The other Ctrl/Alt is selected automatically."},
+            {"Приостановить","Pause"},
+            {"Возобновить","Resume"},
+            {"Автоматически","Automatic"},
+            {"Поиск приложения","Search applications"},
+            {"Удерживайте клавишу и двигайте мышь вверх или вниз. Отпустите, чтобы остановить.","Hold the key and move the mouse up or down. Release to stop."},
+            {"Добавьте приложения, которым\nReswin не должен мешать.","Add applications that\nReswin should leave alone."},
             {"Включено","Enabled"},
             {"Пауза","Paused"},
             {"Включить управление окнами","Enable window controls"},

@@ -45,7 +45,28 @@ namespace Reswin {
             return new Viewbox { Child=canvas,Width=32,Height=32,Stretch=Stretch.Uniform,IsHitTestVisible=false,Focusable=false };
         }
         static double Number(XmlElement element,string attribute) { string value=element.GetAttribute(attribute); return value.Length==0?0:double.Parse(value,CultureInfo.InvariantCulture); }
+        internal static FrameworkElement Lucide(string name,double size=20,string brush="TextBrush") {
+            var canvas=new Canvas {Width=24,Height=24}; var document=new XmlDocument();
+            using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("Reswin.Icons.lucide-"+name+".svg")) document.Load(stream);
+            foreach(XmlNode node in document.DocumentElement.ChildNodes) {
+                var el=node as XmlElement; if(el==null) continue; Shape shape;
+                switch(el.LocalName) {
+                    case "path": shape=new Path {Data=System.Windows.Media.Geometry.Parse(el.GetAttribute("d"))}; break;
+                    case "rect": shape=new Rectangle {Width=Number(el,"width"),Height=Number(el,"height"),RadiusX=Number(el,"rx"),RadiusY=Number(el,"rx")}; Canvas.SetLeft(shape,Number(el,"x")); Canvas.SetTop(shape,Number(el,"y")); break;
+                    case "circle": double radius=Number(el,"r"); shape=new Ellipse {Width=radius*2,Height=radius*2}; Canvas.SetLeft(shape,Number(el,"cx")-radius); Canvas.SetTop(shape,Number(el,"cy")-radius); break;
+                    case "line": shape=new Line {X1=Number(el,"x1"),Y1=Number(el,"y1"),X2=Number(el,"x2"),Y2=Number(el,"y2")}; break;
+                    case "polyline": shape=new Polyline {Points=PointCollection.Parse(el.GetAttribute("points"))}; break;
+                    default: continue;
+                }
+                shape.StrokeThickness=1.8; shape.StrokeStartLineCap=shape.StrokeEndLineCap=PenLineCap.Round; shape.StrokeLineJoin=PenLineJoin.Round;
+                if(brush=="ButtonForeground") shape.SetBinding(Shape.StrokeProperty,new Binding("Foreground") {RelativeSource=new RelativeSource(RelativeSourceMode.FindAncestor,typeof(Button),1)});
+                else shape.SetResourceReference(Shape.StrokeProperty,brush);
+                canvas.Children.Add(shape);
+            }
+            return new Viewbox {Child=canvas,Width=size,Height=size,IsHitTestVisible=false,Focusable=false};
+        }
         internal static FrameworkElement Symbol(string name,double size=24,string brush="TextBrush") {
+            if(name=="plus" || name=="folder" || name=="ban" || name=="close") return Lucide(name=="close"?"x":name,size,brush);
             string data;
             switch(name) {
                 case "plus": data="M12,3 L12,21 M3,12 L21,12"; break;

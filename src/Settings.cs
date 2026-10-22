@@ -5,6 +5,8 @@ using System.Xml.Serialization;
 
 namespace Reswin {
     public enum WindowAction { Move, Resize, Center, None, Minimize, Maximize }
+    // Legacy values remain readable so older XML settings can migrate without losing bindings.
+    public enum ScrollBinding { None, OtherModifier, CtrlAlt, Space, F8 }
     public enum ThemeMode { System, Light, Dark }
     public class Exclusion { public string Name {get;set;} public string Path {get;set;} }
     public class Settings {
@@ -12,13 +14,14 @@ namespace Reswin {
         public ThemeMode Appearance {get;set;}
         public AppLanguage Language {get;set;}
         public int Modifier {get;set;}
+        public ScrollBinding ScrollKey {get;set;}
         public WindowAction Left {get;set;}
         public WindowAction Right {get;set;}
         public WindowAction Middle {get;set;}
         public WindowAction Back {get;set;}
         public WindowAction Forward {get;set;}
         public List<Exclusion> Exclusions {get;set;}
-        public Settings() { Enabled=true; Modifier=0xA2; Left=WindowAction.Move; Right=WindowAction.Resize; Middle=WindowAction.Center; Back=WindowAction.Minimize; Forward=WindowAction.Maximize; Exclusions=new List<Exclusion>(); }
+        public Settings() { Enabled=true; Modifier=0xA2; ScrollKey=ScrollBinding.OtherModifier; Left=WindowAction.Move; Right=WindowAction.Resize; Middle=WindowAction.Center; Back=WindowAction.Minimize; Forward=WindowAction.Maximize; Exclusions=new List<Exclusion>(); }
         public bool IsExcluded(string path) { return Exclusions.Exists(x=>string.Equals(x.Path,path,StringComparison.OrdinalIgnoreCase)); }
         public WindowAction Action(int button) { return button==0?Left:button==1?Right:button==2?Middle:button==3?Back:button==4?Forward:WindowAction.None; }
         internal static string Location { get { return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Reswin","settings.xml"); } }
@@ -28,6 +31,7 @@ namespace Reswin {
                 if(!File.Exists(Location)) return new Settings();
                 using(var stream=File.OpenRead(Location)) {
                     var value=(Settings)new XmlSerializer(typeof(Settings)).Deserialize(stream);
+                    if(value.ScrollKey!=ScrollBinding.None) value.ScrollKey=ScrollBinding.OtherModifier;
                     if(value.Modifier!=0xA2 && value.Modifier!=0xA4) value.Modifier=0xA2;
                     if(!Enum.IsDefined(typeof(ThemeMode),value.Appearance)) value.Appearance=ThemeMode.System;
                     if(!Enum.IsDefined(typeof(AppLanguage),value.Language)) value.Language=AppLanguage.Russian;

@@ -1,11 +1,14 @@
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
+using System.Threading;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 
 namespace Reswin {
     internal sealed class WindowEngine : IDisposable {
         readonly Settings settings;
+        readonly HoldScroll scroll;
         readonly Dispatcher dispatcher;
         readonly uint ownProcess=(uint)Process.GetCurrentProcess().Id;
         readonly int ownIntegrity;
@@ -13,7 +16,13 @@ namespace Reswin {
         readonly bool[] suppressed=new bool[5];
         IntPtr mouseHook,keyHook;
         Gesture current;
-        bool disposed;
+        volatile bool disposed;
+        readonly object workLock=new object();
+        readonly Dictionary<IntPtr,Queue<WindowRequest>> workers=new Dictionary<IntPtr,Queue<WindowRequest>>();
+        internal sealed class WindowRequest {
+            internal Gesture Gesture;
+            internal Native.Point Point;
+        }
         internal event Action<string> Status;
         internal sealed class Gesture {
             internal IntPtr Window;
@@ -21,10 +30,11 @@ namespace Reswin {
             internal Native.Rect Origin;
             internal Native.Point Start,Latest;
             internal int Button,Edges,MinW=1,MinH=1,MaxW=100000,MaxH=100000;
-            internal bool Pending,Initialized;
+            internal bool Initialized;
+            internal WindowRequest QueuedRequest;
         }
         internal WindowEngine(Settings settings,Dispatcher dispatcher) {
-            this.settings=settings; this.dispatcher=dispatcher;
+            this.settings=settings; this.dispatcher=dispatcher; scroll=new HoldScroll(settings,dispatcher);
             ownIntegrity=Native.Integrity(ownProcess); mouseProc=MouseHook; keyProc=KeyHook;
         }
         internal void Start() {
@@ -48,7 +58,10 @@ namespace Reswin {
             if(code>=0) {
                 try {
                     var data=Marshal.PtrToStructure<Native.KeyData>(pointer);
-                    if((data.Flags&0x10)==0 && (message.ToInt32()==0x101 || message.ToInt32()==0x105) && data.Key==settings.Modifier) Cancel();
+                    if((data.Flags&0x10)==0) {
+                        if(scroll.HandleKey(message.ToInt32(),(int)data.Key,current==null)) return new IntPtr(1);
+                        if((message.ToInt32()==0x101 || message.ToInt32()==0x105) && data.Key==settings.Modifier) Cancel();
+                    }
                 } catch { Cancel(); }
             }
             return Native.CallNextHookEx(keyHook,code,message,pointer);
@@ -74,6 +87,7 @@ namespace Reswin {
                 button=side==1?3:side==2?4:-1;
             }
             if(button<0) return false;
+            scroll.Stop();
             bool down=message==0x201 || message==0x204 || message==0x207 || message==0x20B;
             if(!down) {
                 if(!suppressed[button]) return false;
@@ -117,15 +131,58 @@ namespace Reswin {
             return true;
         }
         void Schedule(Gesture gesture) {
-            if(gesture.Pending || disposed) return;
-            gesture.Pending=true;
-            dispatcher.BeginInvoke(DispatcherPriority.Input,new Action(delegate {
-                gesture.Pending=false;
-                if(disposed || !Native.IsWindow(gesture.Window)) return;
-                try { Apply(gesture); } catch(Exception e) { if(current==gesture) current=null; Report(L.T("Не удалось изменить окно: ")+e.Message); }
-            }));
+            lock(workLock) {
+                if(disposed) return;
+                // Only the newest cursor position waits behind an in-flight resize.
+                // Never post a backlog of positions to the destination application's UI.
+                if(gesture.QueuedRequest!=null) {
+                    gesture.QueuedRequest.Point=gesture.Latest;
+                    return;
+                }
+                var request=new WindowRequest {Gesture=gesture,Point=gesture.Latest};
+                gesture.QueuedRequest=request;
+                Queue<WindowRequest> queue;
+                bool startWorker=!workers.TryGetValue(gesture.Window,out queue);
+                if(startWorker) {
+                    queue=new Queue<WindowRequest>();
+                    workers.Add(gesture.Window,queue);
+                }
+                queue.Enqueue(request);
+                // One worker per window also preserves ordering across separate gestures
+                // and one-shot actions. A hung application cannot block other windows.
+                if(startWorker) ThreadPool.QueueUserWorkItem(delegate { Drain(gesture.Window); });
+            }
         }
-        internal void Apply(Gesture g) {
+        void Drain(IntPtr window) {
+            var cadence=Stopwatch.StartNew();
+            long previous=-8;
+            while(true) {
+                // Cap fast applications at roughly 125 updates/s without changing the
+                // system timer resolution. Slow applications naturally apply backpressure.
+                int delay=(int)(8-(cadence.ElapsedMilliseconds-previous));
+                if(delay>0) Thread.Sleep(delay);
+                WindowRequest request;
+                lock(workLock) {
+                    Queue<WindowRequest> queue;
+                    if(!workers.TryGetValue(window,out queue)) return;
+                    if(disposed || queue.Count==0) { workers.Remove(window); return; }
+                    request=queue.Dequeue();
+                    request.Gesture.QueuedRequest=null;
+                }
+                previous=cadence.ElapsedMilliseconds;
+                if(disposed || !Native.IsWindow(window)) continue;
+                try { Apply(request.Gesture,request.Point); }
+                catch(Exception e) {
+                    string error=e.Message;
+                    if(!disposed && !dispatcher.HasShutdownStarted) dispatcher.BeginInvoke(new Action(delegate {
+                        if(current==request.Gesture) current=null;
+                        Report(L.T("Не удалось изменить окно: ")+error);
+                    }));
+                }
+            }
+        }
+        internal void Apply(Gesture g) { Apply(g,g.Latest); }
+        void Apply(Gesture g,Native.Point point) {
             if(g.Action==WindowAction.Minimize || g.Action==WindowAction.Maximize) {
                 if(!g.Initialized) {
                     g.Initialized=true;
@@ -144,7 +201,7 @@ namespace Reswin {
                     double fraction=(g.Start.X-g.Origin.Left)/(double)Math.Max(1,g.Origin.Width);
                     int x=g.Start.X-(int)(width*fraction),y=g.Start.Y-Math.Min(g.Start.Y-g.Origin.Top,height/2);
                     g.Origin=new Native.Rect(x,y,x+width,y+height);
-                    Native.ShowWindowAsync(g.Window,9);
+                    Native.ShowWindow(g.Window,9);
                 }
                 if(g.Action==WindowAction.Resize) {
                     var limits=new Native.MinMax(); IntPtr result;
@@ -158,17 +215,32 @@ namespace Reswin {
             Native.Rect target=g.Origin;
             if(g.Action==WindowAction.Center) target=Geometry.Center(target,Native.Monitor(g.Window).Work);
             else {
-                int dx=g.Latest.X-g.Start.X,dy=g.Latest.Y-g.Start.Y;
+                int dx=point.X-g.Start.X,dy=point.Y-g.Start.Y;
                 if(g.Action==WindowAction.Resize) target=Geometry.Resize(target,g.Edges,dx,dy,g.MinW,g.MinH,g.MaxW,g.MaxH);
                 else target=new Native.Rect(target.Left+dx,target.Top+dy,target.Right+dx,target.Bottom+dy);
             }
-            // ASYNCWINDOWPOS prevents another application's UI thread from blocking ours.
-            Native.SetWindowPos(g.Window,IntPtr.Zero,target.Left,target.Top,target.Width,target.Height,0x4000|0x4|0x10);
+            Native.Rect actual;
+            bool haveActual=Native.GetWindowRect(g.Window,out actual);
+            if(haveActual && actual.Left==target.Left && actual.Top==target.Top &&
+                actual.Width==target.Width && actual.Height==target.Height) return;
+            uint flags=0x4|0x10;
+            if(haveActual && actual.Width==target.Width && actual.Height==target.Height) flags|=0x1;
+            // Synchronous on the background worker: wait until this position has been
+            // processed, then take the newest sample. ASYNCWINDOWPOS would defeat
+            // coalescing by filling the receiving thread's queue with obsolete resizes.
+            Native.SetWindowPos(g.Window,IntPtr.Zero,target.Left,target.Top,target.Width,target.Height,flags);
         }
-        internal void Cancel() { if(current!=null) { Schedule(current); current=null; } }
+        internal void Cancel() { scroll.Stop(); if(current!=null) { Schedule(current); current=null; } }
         void Report(string text) { if(Status!=null) dispatcher.BeginInvoke(new Action(delegate { if(Status!=null) Status(text); })); }
         public void Dispose() {
-            disposed=true; current=null;
+            disposed=true; current=null; scroll.Dispose();
+            lock(workLock) {
+                foreach(var queue in workers.Values) {
+                    foreach(var request in queue) request.Gesture.QueuedRequest=null;
+                    queue.Clear();
+                }
+                workers.Clear();
+            }
             if(mouseHook!=IntPtr.Zero) Native.UnhookWindowsHookEx(mouseHook);
             if(keyHook!=IntPtr.Zero) Native.UnhookWindowsHookEx(keyHook);
             mouseHook=keyHook=IntPtr.Zero;

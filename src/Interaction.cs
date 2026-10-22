@@ -16,8 +16,8 @@ namespace Reswin {
                     var panel=popup==null?null:popup.Child as FrameworkElement;
                     if(panel==null) return;
                     var slide=new TranslateTransform(); panel.RenderTransform=slide;
-                    var duration=TimeSpan.FromMilliseconds(280);
-                    slide.BeginAnimation(TranslateTransform.YProperty,new DoubleAnimation(-12,0,duration) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseOut } });
+                    var duration=TimeSpan.FromMilliseconds(220);
+                    slide.BeginAnimation(TranslateTransform.YProperty,new DoubleAnimation(-6,0,duration) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseOut } });
                     panel.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(0,1,duration) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseOut } });
                 }));
             };
@@ -31,7 +31,7 @@ namespace Reswin {
             Action update=delegate {
                 int token=++revision;
                 bool active=button.IsMouseOver || button.IsKeyboardFocused;
-                double target=active?1.18:1;
+                double target=active?1.12:1;
                 var duration=TimeSpan.FromMilliseconds(SystemParameters.ClientAreaAnimation?220:0);
                 scale.BeginAnimation(ScaleTransform.ScaleXProperty,new DoubleAnimation(scale.ScaleX,target,duration) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseOut } });
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty,new DoubleAnimation(scale.ScaleY,target,duration) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseOut } });
@@ -53,15 +53,15 @@ namespace Reswin {
                 control.ApplyTemplate(); var thumb=control.Template.FindName("Thumb",control) as FrameworkElement; if(thumb==null) return;
                 var transform=thumb.RenderTransform as TranslateTransform;
                 if(transform==null) { transform=new TranslateTransform(); thumb.RenderTransform=transform; }
-                double target=control.IsChecked==true?24:0;
+                double target=control.IsChecked==true?18:0;
                 var track=control.Template.FindName("ActiveTrack",control) as UIElement;
                 if(track!=null) {
                     double opacity=control.IsChecked==true?1:0;
                     if(!animate) { track.BeginAnimation(UIElement.OpacityProperty,null); track.Opacity=opacity; }
-                    else track.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(track.Opacity,opacity,TimeSpan.FromMilliseconds(280)) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } });
+                    else track.BeginAnimation(UIElement.OpacityProperty,new DoubleAnimation(track.Opacity,opacity,TimeSpan.FromMilliseconds(220)) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } });
                 }
                 if(!animate) { transform.BeginAnimation(TranslateTransform.XProperty,null); transform.X=target; }
-                else transform.BeginAnimation(TranslateTransform.XProperty,new DoubleAnimation(transform.X,target,TimeSpan.FromMilliseconds(280)) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } });
+                else transform.BeginAnimation(TranslateTransform.XProperty,new DoubleAnimation(transform.X,target,TimeSpan.FromMilliseconds(220)) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } });
             };
             control.Loaded+=delegate { update(false); };
             control.Checked+=delegate { if(control.IsLoaded) update(true); };

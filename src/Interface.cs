@@ -29,12 +29,12 @@ namespace Reswin {
         internal ProgramPicker(Settings settings) {
             this.settings=settings;
             SetResourceReference(StyleProperty,typeof(Window));
-            Title=L.T("Добавить исключение"); Width=420; Height=470; MinWidth=360; MinHeight=360; WindowStartupLocation=WindowStartupLocation.CenterOwner;
-            var root=new DockPanel { Margin=new Thickness(20) }; Content=root;
+            Title=L.T("Добавить исключение"); Width=460; Height=500; MinWidth=360; MinHeight=360; WindowStartupLocation=WindowStartupLocation.CenterOwner;
+            var root=new DockPanel { Margin=new Thickness(24) }; Content=root;
             var top=new StackPanel(); DockPanel.SetDock(top,Dock.Top); root.Children.Add(top);
-            var title=Theme.Text(L.T("Не трогать эти окна"),21,false); title.FontWeight=FontWeights.SemiBold; title.Margin=new Thickness(0,0,0,7); top.Children.Add(title);
+            var title=Theme.Text(L.T("Добавить исключение"),23,false); title.FontWeight=FontWeights.SemiBold; title.Margin=new Thickness(0,0,0,7); top.Children.Add(title);
             var subtitle=Theme.Text(L.T("Выберите программу из открытых."),12,true); subtitle.Margin=new Thickness(0,0,0,14); top.Children.Add(subtitle);
-            search.Margin=new Thickness(0,0,0,12); search.ToolTip=L.T("Поиск по программе или заголовку окна"); Theme.Accessible(search,L.T("Поиск открытых программ")); top.Children.Add(search); search.TextChanged+=delegate { Render(); };
+            search.Margin=new Thickness(0,0,0,12); search.ToolTip=L.T("Поиск по программе или заголовку окна"); Theme.Accessible(search,L.T("Поиск открытых программ")); var searchLabel=Theme.Text(L.T("Поиск приложения"),12,true); searchLabel.Margin=new Thickness(2,0,0,5); top.Children.Add(searchLabel); top.Children.Add(search); search.TextChanged+=delegate { Render(); };
             var bottom=new DockPanel { Margin=new Thickness(0,12,0,0) }; DockPanel.SetDock(bottom,Dock.Bottom); root.Children.Add(bottom); DockPanel.SetDock(refresh,Dock.Right); bottom.Children.Add(refresh); hint.TextWrapping=TextWrapping.Wrap; bottom.Children.Add(hint);
             root.Children.Add(new SmoothScrollViewer { Content=rows,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled });
             Loaded+=delegate { LoadPrograms(); search.Focus(); }; Closed+=delegate { closed=true; }; refresh.Click+=delegate { LoadPrograms(); };
@@ -67,8 +67,8 @@ namespace Reswin {
                 if(settings.IsExcluded(program.Path) || (query.Length>0 && (program.Name+" "+program.Title).IndexOf(query,StringComparison.CurrentCultureIgnoreCase)<0)) continue;
                 var content=new DockPanel();
                 if(program.Icon!=null) { var icon=new Image { Source=program.Icon,Width=24,Height=24,Margin=new Thickness(0,0,10,0) }; DockPanel.SetDock(icon,Dock.Left); content.Children.Add(icon); }
-                var labels=new StackPanel(); var name=Theme.Text(program.Name,13,false); name.TextTrimming=TextTrimming.CharacterEllipsis; labels.Children.Add(name); var title=Theme.Text(program.Title,11,true); title.TextTrimming=TextTrimming.CharacterEllipsis; labels.Children.Add(title); content.Children.Add(labels);
-                var button=new Button { Content=content,HorizontalContentAlignment=HorizontalAlignment.Stretch,Margin=new Thickness(0,0,0,6),Padding=new Thickness(10),ToolTip=program.Path };
+                var labels=new StackPanel(); var name=Theme.Text(program.Name,14,false); name.TextTrimming=TextTrimming.CharacterEllipsis; name.FontWeight=FontWeights.SemiBold; name.Margin=new Thickness(0,0,0,3); labels.Children.Add(name); var title=Theme.Text(program.Title,12,true); title.TextTrimming=TextTrimming.CharacterEllipsis; labels.Children.Add(title); content.Children.Add(labels);
+                var button=new Button { Content=content,HorizontalContentAlignment=HorizontalAlignment.Stretch,Margin=new Thickness(0,0,0,6),Padding=new Thickness(12),BorderThickness=new Thickness(0),ToolTip=program.Path };
                 Theme.Accessible(button,L.T("Исключить ")+program.Name);
                 button.Click+=delegate { if(!settings.IsExcluded(program.Path)) settings.Exclusions.Add(new Exclusion { Name=program.Name,Path=program.Path }); DialogResult=true; };
                 rows.Children.Add(button);

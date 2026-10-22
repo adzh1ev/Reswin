@@ -38,14 +38,14 @@ namespace Reswin {
             using(var icon=MakeIcon()) {
                 MainWindow window=null;
                 Action reveal=null; bool themeInstalled=false; bool rebuilding=false;
-                var menu=new Forms.ContextMenuStrip();
+                var menu=new TrayMenu();
                 var open=new Forms.ToolStripMenuItem(L.T("Открыть настройки"));
-                var pause=new Forms.ToolStripMenuItem(L.T("Включено")) { Checked=settings.Enabled,CheckOnClick=false };
+                var pause=new Forms.ToolStripMenuItem(settings.Enabled?L.T("Приостановить"):L.T("Возобновить")) { Checked=settings.Enabled,CheckOnClick=false };
                 var exit=new Forms.ToolStripMenuItem(L.T("Выйти"));
                 Action save=delegate {
                     bool languageChanged=L.Language!=settings.Language;
                     L.Language=settings.Language;
-                    open.Text=L.T("Открыть настройки"); pause.Text=L.T("Включено"); exit.Text=L.T("Выйти");
+                    open.Text=L.T("Открыть настройки"); pause.Text=settings.Enabled?L.T("Приостановить"):L.T("Возобновить"); exit.Text=L.T("Выйти");
                     if(languageChanged && window!=null && !rebuilding) {
                         rebuilding=true;
                         app.Dispatcher.BeginInvoke(new Action(delegate {
