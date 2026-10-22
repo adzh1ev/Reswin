@@ -19,7 +19,7 @@ namespace Reswin {
         internal MainWindow(Settings settings,Action changed,bool preview=false) {
             this.settings=settings; this.changed=changed;
             SetResourceReference(StyleProperty,typeof(Window));
-            Title="Reswin 1.1.0"; Width=460; Height=Math.Min(720,SystemParameters.WorkArea.Height);
+            Title="Reswin 1.1.1"; Width=460; Height=Math.Min(720,SystemParameters.WorkArea.Height);
             MinWidth=460; MinHeight=Math.Min(540,SystemParameters.WorkArea.Height);
             WindowStyle=WindowStyle.SingleBorderWindow; ResizeMode=ResizeMode.CanMinimize; WindowStartupLocation=WindowStartupLocation.CenterScreen;
             var body=new Border(); body.SetResourceReference(Border.BackgroundProperty,"BackgroundBrush"); Content=body;

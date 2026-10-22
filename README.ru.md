@@ -2,7 +2,7 @@
 
 Небольшая утилита для управления окнами Windows. Зажмите клавишу-модификатор и используйте мышь: окно можно перемещать за любую точку, менять размер, центрировать, сворачивать и разворачивать.
 
-[Скачать 1.1.0](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.0) · [English](README.md)
+[Скачать 1.1.1](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.1) · [English](README.md)
 
 ## Запуск
 
@@ -46,7 +46,7 @@ Windows 10/11 x64 с .NET Framework 4.8 и WPF. Приложение напис�
 
 ## Изменения
 
-[Что нового в версии 1.1.0](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.0).
+[Что нового в версии 1.1.1](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.1).
 
 ## Иконки
 

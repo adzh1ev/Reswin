@@ -18,8 +18,10 @@ namespace Reswin {
         [StructLayout(LayoutKind.Sequential)] internal struct MinMax { public Point Reserved,MaxSize,MaxPosition,MinTrack,MaxTrack; }
         [StructLayout(LayoutKind.Sequential)] internal struct Placement { public int Length,Flags,Show; public Point Min,Max; public Rect Normal; }
         [StructLayout(LayoutKind.Sequential)] internal struct KeyboardInput { public ushort Key,Scan; public uint Flags,Time; public UIntPtr Extra; }
-        [StructLayout(LayoutKind.Explicit,Size=40)] internal struct Input { [FieldOffset(0)] public uint Type; [FieldOffset(8)] public KeyboardInput Keyboard; }
+        [StructLayout(LayoutKind.Sequential)] internal struct MouseInput { public int X,Y; public uint Data,Flags,Time; public UIntPtr Extra; }
+        [StructLayout(LayoutKind.Explicit,Size=40)] internal struct Input { [FieldOffset(0)] public uint Type; [FieldOffset(8)] public KeyboardInput Keyboard; [FieldOffset(8)] public MouseInput Mouse; }
         [DllImport("user32.dll",SetLastError=true)] internal static extern uint SendInput(uint count,Input[] inputs,int size);
+        internal static uint Inject(params Input[] inputs) { return SendInput((uint)inputs.Length,inputs,Marshal.SizeOf(typeof(Input))); }
         [DllImport("user32.dll", SetLastError=true)] internal static extern IntPtr SetWindowsHookEx(int type,HookProc proc,IntPtr module,uint thread);
         [DllImport("user32.dll")] internal static extern bool UnhookWindowsHookEx(IntPtr hook);
         [DllImport("user32.dll")] internal static extern IntPtr CallNextHookEx(IntPtr hook,int code,IntPtr message,IntPtr data);

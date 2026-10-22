@@ -2,7 +2,7 @@
 
 A small Windows utility that lets you move and resize windows from anywhere inside them. Hold a modifier key, then use your mouse.
 
-[Download 1.1.0](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.0) · [Русский](README.ru.md)
+[Download 1.1.1](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.1) · [Русский](README.ru.md)
 
 ## Get started
 
@@ -48,7 +48,7 @@ To control an application running as administrator, Reswin needs the same privil
 
 | Files | Purpose |
 | --- | --- |
-| `src/WindowEngine.cs`, `src/Native.cs`, `src/HoldScroll.cs` | Input hooks, window operations and hold-to-scroll |
+| `src/WindowEngine.cs`, `src/Native.cs`, `src/HoldScroll.cs`, `src/ScrollAnimator.cs` | Input hooks, window operations and hold-to-scroll |
 | `src/MainWindow.cs`, `src/Interface.cs` | Settings and application picker |
 | `src/Theme.cs`, `src/Interaction.cs`, `src/SmoothScrollViewer.cs` | Styling, motion and scrolling |
 | `src/Settings.cs`, `src/Localization.cs`, `src/Startup.cs` | Persistence, languages and opt-in startup |
@@ -57,7 +57,7 @@ To control an application running as administrator, Reswin needs the same privil
 
 ## Changes
 
-See [what changed in 1.1.0](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.0).
+See [what changed in 1.1.1](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.1).
 
 ## Icon credits
 

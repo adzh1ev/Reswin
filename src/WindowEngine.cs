@@ -50,7 +50,7 @@ namespace Reswin {
             if(message.ToInt32()==0x200 && current==null) return Native.CallNextHookEx(mouseHook,code,message,pointer);
             try {
                 var data=Marshal.PtrToStructure<Native.MouseData>(pointer);
-                if((data.Flags&1)==0 && HandleMouse(message.ToInt32(),data.Point,data.Mouse)) return new IntPtr(1);
+                if((data.Flags&1)==0 && (scroll.HandleMouse(message.ToInt32(),data.Mouse) || HandleMouse(message.ToInt32(),data.Point,data.Mouse))) return new IntPtr(1);
             } catch(Exception e) { Cancel(); Report(L.T("Жест отменён: ")+e.Message); }
             return Native.CallNextHookEx(mouseHook,code,message,pointer);
         }
@@ -59,7 +59,7 @@ namespace Reswin {
                 try {
                     var data=Marshal.PtrToStructure<Native.KeyData>(pointer);
                     if((data.Flags&0x10)==0) {
-                        if(scroll.HandleKey(message.ToInt32(),(int)data.Key,current==null)) return new IntPtr(1);
+                        if(scroll.HandleKey(message.ToInt32(),(int)data.Key,current==null,data.Scan,data.Flags)) return new IntPtr(1);
                         if((message.ToInt32()==0x101 || message.ToInt32()==0x105) && data.Key==settings.Modifier) Cancel();
                     }
                 } catch { Cancel(); }

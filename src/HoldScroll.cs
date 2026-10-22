@@ -1,5 +1,6 @@
+﻿using System.Diagnostics;
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.Threading;
 using System.Windows.Threading;
 
@@ -7,50 +8,133 @@ namespace Reswin {
     internal sealed class HoldScroll : IDisposable {
         readonly Settings settings;
         readonly Dispatcher dispatcher;
-        readonly DispatcherTimer timer;
+        readonly ScrollAnimator animator;
+        readonly DispatcherTimer replayTimer;
+        List<Native.Input> pendingReplay;
         readonly bool[] keys=new bool[256];
+        readonly bool[] droppedKeys=new bool[256];
         readonly uint ownProcess=(uint)Process.GetCurrentProcess().Id;
         readonly int ownIntegrity;
-        readonly Stopwatch clock=new Stopwatch();
         IntPtr target,root,foreground;
         Native.Point anchor;
-        int consumedKey,blocked,epoch,busy;
-        double previous,remainder;
-        bool latched,disposed;
+        int privateKey,epoch;
+        volatile bool disposed;
         internal bool Active { get { return target!=IntPtr.Zero; } }
         internal HoldScroll(Settings settings,Dispatcher dispatcher) {
             this.settings=settings; this.dispatcher=dispatcher;
             ownIntegrity=Native.Integrity(ownProcess);
-            timer=new DispatcherTimer(DispatcherPriority.Input,dispatcher) {Interval=TimeSpan.FromMilliseconds(16)};
-            timer.Tick+=Tick;
+            animator=new ScrollAnimator(SystemModifiersDown,delegate(int generation) {
+                if(!disposed && !dispatcher.HasShutdownStarted)
+                    dispatcher.BeginInvoke(new Action(delegate { if(!disposed && epoch==generation) Stop(); }));
+            });
+            replayTimer=new DispatcherTimer(DispatcherPriority.Input,dispatcher) {Interval=TimeSpan.FromMilliseconds(8)};
+            replayTimer.Tick+=FlushReplay;
         }
-        bool Down(int key) { return keys[key] || (Native.GetAsyncKeyState(key)&0x8000)!=0; }
-        int SingleKey { get { return settings.ScrollKey==ScrollBinding.OtherModifier?(settings.Modifier==0xA2?0xA4:0xA2):settings.ScrollKey==ScrollBinding.Space?0x20:settings.ScrollKey==ScrollBinding.F8?0x77:0; } }
-        bool TriggerKey(int key) { return settings.ScrollKey==ScrollBinding.CtrlAlt?(key==0xA2 || key==0xA4):key==SingleKey; }
-        bool ChordDown { get { return settings.ScrollKey==ScrollBinding.CtrlAlt?keys[0xA2] && keys[0xA4]:SingleKey!=0 && keys[SingleKey]; } }
-        bool AllReleased { get { return settings.ScrollKey==ScrollBinding.CtrlAlt?!keys[0xA2] && !keys[0xA4]:SingleKey==0 || !keys[SingleKey]; } }
-        internal bool HandleKey(int message,int key,bool canStart) {
+        int ScrollKey { get { return settings.Modifier==0xA2?0xA4:0xA2; } }
+        static bool SystemModifiersDown() {
+            return (Native.GetAsyncKeyState(0x11)&0x8000)!=0 ||
+                   (Native.GetAsyncKeyState(0x12)&0x8000)!=0 ||
+                   (Native.GetAsyncKeyState(0x10)&0x8000)!=0 ||
+                   (Native.GetAsyncKeyState(0x5B)&0x8000)!=0 ||
+                   (Native.GetAsyncKeyState(0x5C)&0x8000)!=0;
+        }
+        bool OtherKeysDown(int trigger) {
+            for(int i=0;i<keys.Length;i++) if(i!=trigger && keys[i]) return true;
+            // The incoming trigger has not updated the OS key state yet.
+            return SystemModifiersDown() || (Native.GetAsyncKeyState(1)&0x8000)!=0 ||
+                (Native.GetAsyncKeyState(2)&0x8000)!=0 || (Native.GetAsyncKeyState(4)&0x8000)!=0 ||
+                (Native.GetAsyncKeyState(5)&0x8000)!=0 || (Native.GetAsyncKeyState(6)&0x8000)!=0;
+        }
+        static Native.Input KeyInput(int key,uint scan=0,uint flags=0) {
+            return new Native.Input {Type=1,Keyboard=new Native.KeyboardInput {Key=(ushort)key,Scan=(ushort)scan,Flags=flags}};
+        }
+        bool ReplayWithModifier(Native.Input input) {
+            Stop();
+            if(privateKey==0) return false;
+            if(animator.IsSending) {
+                // Finish the one in-flight wheel delivery before exposing Ctrl.
+                // Buffer matching physical key-ups too, so quick shortcuts stay balanced.
+                pendingReplay=new List<Native.Input> {KeyInput(privateKey),input};
+                privateKey=0; replayTimer.Start(); return true;
+            }
+            // Send both events in one ordered batch. Physical key-up balances
+            // the replayed modifier; injected events bypass our physical hooks.
+            uint sent=Native.Inject(KeyInput(privateKey),input);
+            if(sent!=0) privateKey=0;
+            if(sent==1) return Native.Inject(input)==1;
+            return sent==2;
+        }
+        void FlushReplay(object sender,EventArgs args) {
+            if(animator.IsSending) return;
+            replayTimer.Stop();
+            if(pendingReplay==null) return;
+            Native.Input[] inputs=pendingReplay.ToArray(); pendingReplay=null;
+            uint sent=Native.Inject(inputs);
+            if(sent<inputs.Length) {
+                // UIPI or another input filter can reject injection. Never replay
+                // an unmodified letter from a shortcut after such a failure.
+                for(int i=(int)sent;i<inputs.Length;i++) {
+                    var input=inputs[i];
+                    if(input.Type==1) {
+                        if((input.Keyboard.Flags&2)==0 && keys[input.Keyboard.Key]) droppedKeys[input.Keyboard.Key]=true;
+                        else if((input.Keyboard.Flags&2)!=0) Native.Inject(input);
+                    } else if((input.Mouse.Flags&(0x4|0x10|0x40|0x100))!=0) Native.Inject(input);
+                }
+            }
+        }
+        internal bool HandleKey(int message,int key,bool canStart,uint scan=0,uint flags=0) {
             if(key<0 || key>=keys.Length) return false;
             bool down=message==0x100 || message==0x104;
             bool up=message==0x101 || message==0x105;
             if(!down && !up) return false;
             bool repeat=keys[key]; keys[key]=down;
-            if(up && key==consumedKey) { consumedKey=0; Stop(); latched=false; blocked=0; return true; }
-            if(down && key==consumedKey) return true;
-            if(AllReleased) { Stop(); latched=false; blocked=0; }
-            if(up && TriggerKey(key)) { Stop(); return false; }
-            if(down && !TriggerKey(key)) { if(Active) Stop(); blocked=1; return false; }
-            if(!down || repeat || !ChordDown || latched || blocked!=0 || !canStart || !settings.Enabled || settings.ScrollKey==ScrollBinding.None) return false;
-            // Do not turn existing Ctrl/Shift/Win shortcuts into scrolling. Ctrl+Alt
-            // is an explicit option; right Alt (AltGr) is never used as a trigger.
-            if(Down(0xA0) || Down(0xA1) || Down(0xA3) || Down(0xA5) || Down(0x5B) || Down(0x5C)) return false;
-            if(settings.ScrollKey!=ScrollBinding.CtrlAlt && ((SingleKey!=0xA2 && Down(0xA2)) || (SingleKey!=0xA4 && Down(0xA4)))) return false;
-            latched=true;
+            if(droppedKeys[key]) { if(up) droppedKeys[key]=false; return true; }
+            if(pendingReplay!=null) {
+                pendingReplay.Add(KeyInput(key,scan,(flags&1)|(up?2u:0u)));
+                return true;
+            }
+            if(privateKey!=0) {
+                if(key==privateKey) {
+                    if(up) { privateKey=0; Stop(); }
+                    return true;
+                }
+                if(down) {
+                    // If injection is denied, do not turn Ctrl+C into a typed C.
+                    if(!ReplayWithModifier(KeyInput(key,scan,flags&1))) droppedKeys[key]=true;
+                    return true;
+                }
+                return false;
+            }
+            if(!down || repeat || key!=ScrollKey || !canStart || !settings.Enabled ||
+                settings.ScrollKey!=ScrollBinding.OtherModifier || OtherKeysDown(key)) return false;
             if(!Begin()) return false;
-            // Modifiers remain normal modifiers, so Alt+Tab and Ctrl+C still work.
-            // Space/F8 are dedicated hotkeys while enabled, with paired key suppression.
-            if(key==0x20 || key==0x77) { consumedKey=key; return true; }
-            return false;
+            // Neither half of a scroll-only modifier reaches the browser.
+            privateKey=key;
+            return true;
+        }
+        internal bool HandleMouse(int message,uint data) {
+            if((privateKey==0 && pendingReplay==null) || message==0x200) return false;
+            uint flags;
+            switch(message) {
+                case 0x201: flags=0x2; break;
+                case 0x202: flags=0x4; break;
+                case 0x204: flags=0x8; break;
+                case 0x205: flags=0x10; break;
+                case 0x207: flags=0x20; break;
+                case 0x208: flags=0x40; break;
+                case 0x20B: flags=0x80; break;
+                case 0x20C: flags=0x100; break;
+                case 0x20A: flags=0x800; break;
+                case 0x20E: flags=0x1000; break;
+                default: return false;
+            }
+            uint mouse=0;
+            if(message==0x20B || message==0x20C) mouse=(data>>16)&0xffff;
+            else if(message==0x20A || message==0x20E) mouse=unchecked((uint)(int)(short)(data>>16));
+            // Ordinary Ctrl+click / Ctrl+wheel retain their native behavior.
+            var input=new Native.Input {Type=0,Mouse=new Native.MouseInput {Flags=flags,Data=mouse}};
+            if(pendingReplay!=null) { pendingReplay.Add(input); return true; }
+            return ReplayWithModifier(input);
         }
         bool Begin() {
             Native.Point point;
@@ -63,45 +147,26 @@ namespace Reswin {
             if(cls=="Progman" || cls=="WorkerW" || cls=="Shell_TrayWnd" || cls=="Shell_SecondaryTrayWnd" || cls=="#32768") return false;
             string path=Native.ProcessPath(process);
             if(path==null || settings.IsExcluded(path) || Native.Integrity(process)>ownIntegrity) return false;
-            target=child; root=window; anchor=point; foreground=Native.GetForegroundWindow();
-            remainder=0; previous=0; clock.Restart(); Interlocked.Increment(ref epoch);
-            timer.Start(); return true;
-        }
-        void Tick(object sender,EventArgs args) {
-            Native.Point point;
-            if(!Active || disposed || !settings.Enabled || !ChordDown || !Native.IsWindow(target) || !Native.IsWindowVisible(root) || Native.IsIconic(root) || Native.GetForegroundWindow()!=foreground || !Native.GetCursorPos(out point)) { Stop(); return; }
-            double now=clock.Elapsed.TotalSeconds,dt=Math.Min(0.05,now-previous); previous=now;
-            int distance=point.Y-anchor.Y;
-            if(Math.Abs(distance)<=8) { remainder=0; return; }
-            if(Interlocked.CompareExchange(ref busy,0,0)!=0) { remainder=0; return; }
-            double speed=Math.Min(40,Math.Pow((Math.Abs(distance)-8)/70.0,1.35)*6);
-            double amount=-Math.Sign(distance)*speed*120*dt;
-            if(Math.Sign(remainder)!=Math.Sign(amount)) remainder=0;
-            remainder+=amount;
-            int steps=(int)(remainder/15); if(steps==0) return;
-            int delta=Math.Max(-240,Math.Min(240,steps*15)); remainder-=delta;
-            int generation=epoch;
-            IntPtr destination=target;
-            long coordinates=(uint)(anchor.X&0xffff)|((long)(uint)(anchor.Y&0xffff)<<16);
-            Interlocked.Exchange(ref busy,1);
-            ThreadPool.QueueUserWorkItem(delegate {
-                bool failed=false;
-                try {
-                    if(!disposed && generation==Interlocked.CompareExchange(ref epoch,0,0)) {
-                        IntPtr result;
-                        // Bounded synchronous delivery prevents a slow app accumulating
-                        // wheel messages that would keep scrolling after key release.
-                        failed=Native.SendMessageTimeoutValue(destination,0x20A,new IntPtr(delta<<16),new IntPtr(coordinates),0x1|0x2|0x20,150,out result)==IntPtr.Zero;
-                    }
-                } finally { Interlocked.Exchange(ref busy,0); }
-                if(failed && !disposed && !dispatcher.HasShutdownStarted) dispatcher.BeginInvoke(new Action(delegate { if(epoch==generation) Stop(); }));
-            });
+            IntPtr focused=Native.GetForegroundWindow();
+            uint focusedProcess; Native.GetWindowThreadProcessId(focused,out focusedProcess);
+            // Do not intercept shortcuts that cannot be replayed into an elevated app.
+            if(focused==IntPtr.Zero || Native.Integrity(focusedProcess)>ownIntegrity) return false;
+            target=child; root=window; anchor=point; foreground=focused;
+            int generation=Interlocked.Increment(ref epoch);
+            animator.Start(target,root,foreground,anchor,generation); return true;
         }
         internal void Stop() {
-            if(Active && (keys[0xA4] || (Native.GetAsyncKeyState(0xA4)&0x8000)!=0)) Native.MaskAltMenu();
-            target=IntPtr.Zero; timer.Stop(); clock.Stop(); remainder=0;
+            target=IntPtr.Zero; animator.Stop();
             Interlocked.Increment(ref epoch);
+            // Own the swallowed key until release or a real shortcut: restoring
+            // Ctrl here could turn an in-flight wheel event into zoom.
         }
-        public void Dispose() { disposed=true; Stop(); timer.Tick-=Tick; }
+        public void Dispose() {
+            disposed=true; Stop(); animator.Dispose();
+            replayTimer.Stop(); replayTimer.Tick-=FlushReplay;
+            if(pendingReplay!=null) { Native.Inject(pendingReplay.ToArray()); pendingReplay=null; }
+            if(privateKey!=0 && keys[privateKey]) Native.Inject(KeyInput(privateKey));
+            privateKey=0;
+        }
     }
 }
