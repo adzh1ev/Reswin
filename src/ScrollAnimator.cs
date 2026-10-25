@@ -12,6 +12,7 @@ namespace Reswin {
             internal IntPtr Target,Root,Foreground;
             internal Native.Point Anchor;
             internal int Generation;
+            internal double Sensitivity;
         }
         readonly AutoResetEvent wake=new AutoResetEvent(false);
         readonly Thread worker;
@@ -26,9 +27,9 @@ namespace Reswin {
             this.modifiersDown=modifiersDown; this.stopped=stopped;
             worker=new Thread(Run) {IsBackground=true,Name="Reswin scrolling"};
         }
-        internal void Start(IntPtr target,IntPtr root,IntPtr foreground,Native.Point anchor,int generation) {
+        internal void Start(IntPtr target,IntPtr root,IntPtr foreground,Native.Point anchor,int generation,double sensitivity) {
             if(disposed) return;
-            Volatile.Write(ref current,new Session {Target=target,Root=root,Foreground=foreground,Anchor=anchor,Generation=generation});
+            Volatile.Write(ref current,new Session {Target=target,Root=root,Foreground=foreground,Anchor=anchor,Generation=generation,Sensitivity=Settings.NormalizeScrollSensitivity(sensitivity)});
             if(!started) { started=true; worker.Start(); }
             Signal();
         }
@@ -62,7 +63,7 @@ namespace Reswin {
         void Animate(Session session,FrameTimer frameTimer,WaitHandle[] waits) {
             const double interval=1.0/240;
             var clock=Stopwatch.StartNew();
-            var motion=new Motion();
+            var motion=new Motion(session.Sensitivity);
             double previous=0,next=interval;
             while(IsCurrent(session)) {
                 double delay=next-clock.Elapsed.TotalSeconds;
@@ -97,9 +98,20 @@ namespace Reswin {
             }
         }
         sealed class Motion {
+            const double DeadZone=8;
+            const double DistanceScale=65;
+            const double SpeedGain=8;
+            const double MaxNotchesPerSecond=100;
+            const int MaxFrameDelta=480;
+            readonly double sensitivity;
             double velocity,acceleration,fraction;
+            internal Motion(double sensitivity) { this.sensitivity=sensitivity; }
             internal int Step(int distance,double dt) {
-                double desired=Math.Abs(distance)<=8?0:-Math.Sign(distance)*Math.Min(40,Math.Pow((Math.Abs(distance)-8)/70.0,1.35)*6)*120;
+                // A stronger distance curve keeps fine control near the anchor
+                // and offers more headroom for quickly traversing long documents.
+                double offset=Math.Max(0,Math.Abs(distance)-DeadZone);
+                double speed=Math.Min(MaxNotchesPerSecond,Math.Pow(offset/DistanceScale,1.45)*SpeedGain);
+                double desired=-Math.Sign(distance)*speed*120*sensitivity;
                 double oldVelocity=velocity;
                 // Exact critically damped spring solution for velocity. Keeping
                 // acceleration as state removes abrupt slope changes from lerping.
@@ -114,7 +126,11 @@ namespace Reswin {
                 }
                 // Integrate sub-frame travel instead of rounding each sample away.
                 fraction+=(oldVelocity+velocity)*0.5*dt;
-                int delta=Math.Max(-60,Math.Min(60,(int)fraction));
+                // At 200% and 240 Hz the maximum speed needs about 100 units.
+                // At the bounded 1/60-second dt it needs 400; 480 keeps headroom.
+                // Allow a full sampled frame on slower receivers without the old
+                // 60-unit ceiling silently reducing the new maximum speed.
+                int delta=Math.Max(-MaxFrameDelta,Math.Min(MaxFrameDelta,(int)fraction));
                 fraction-=delta;
                 // Carry only the sub-unit remainder, never a catch-up backlog.
                 if(Math.Abs(fraction)>=1) fraction-=Math.Truncate(fraction);

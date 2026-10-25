@@ -1,0 +1,6 @@
+Manrope by Mikhail Sharanda and the Manrope Project Authors.
+Official source: https://github.com/googlefonts/manrope
+Source commit: 468c0dbe38efa331b80bfe9448256abe27be44c3
+Static TrueType fonts copied without modification from fonts/ttf/.
+Weights bundled: Regular 400, Medium 500, SemiBold 600.
+License: SIL Open Font License 1.1, see OFL.txt.

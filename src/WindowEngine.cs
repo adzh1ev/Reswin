@@ -113,7 +113,9 @@ namespace Reswin {
             rect=new Native.Rect();
             if(window==IntPtr.Zero || !Native.IsWindowVisible(window) || Native.IsIconic(window) || !Native.GetWindowRect(window,out rect) || rect.Width<=0 || rect.Height<=0) return false;
             uint process; Native.GetWindowThreadProcessId(window,out process);
-            if(process==ownProcess) return false;
+            // Allow moving and centering our settings without changing the tray
+            // lifecycle or attempting to resize the fixed-size settings window.
+            if(process==ownProcess && action!=WindowAction.Move && action!=WindowAction.Center) return false;
             long style=Native.GetWindowLongPtr(window,-16).ToInt64(), extended=Native.GetWindowLongPtr(window,-20).ToInt64();
             if((style&0x40000000)!=0 || (extended&0x08000000)!=0) return false;
             string cls=Native.Class(window);

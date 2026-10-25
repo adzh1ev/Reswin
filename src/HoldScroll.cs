@@ -153,7 +153,7 @@ namespace Reswin {
             if(focused==IntPtr.Zero || Native.Integrity(focusedProcess)>ownIntegrity) return false;
             target=child; root=window; anchor=point; foreground=focused;
             int generation=Interlocked.Increment(ref epoch);
-            animator.Start(target,root,foreground,anchor,generation); return true;
+            animator.Start(target,root,foreground,anchor,generation,settings.ScrollSensitivity); return true;
         }
         internal void Stop() {
             target=IntPtr.Zero; animator.Stop();

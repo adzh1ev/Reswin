@@ -6,7 +6,7 @@ using System.Windows.Forms;
 namespace Reswin {
     // Native dismissal/keyboard support, with a rounded window silhouette.
     internal sealed class TrayMenu : ContextMenuStrip {
-        readonly Font menuFont=new Font("Segoe UI",9.5f);
+        readonly Font menuFont=Typography.CreateMenuFont(9.5f);
         internal TrayMenu() {
             Font=menuFont; ShowImageMargin=false; ShowCheckMargin=false;
             DropShadowEnabled=true; Renderer=new MinimalRenderer();

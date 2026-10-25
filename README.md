@@ -2,7 +2,7 @@
 
 A small Windows utility that lets you move and resize windows from anywhere inside them. Hold a modifier key, then use your mouse.
 
-[Download 1.1.1](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.1) · [Русский](README.ru.md)
+[Download 1.1.2](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.2) · [Русский](README.ru.md)
 
 ## Get started
 
@@ -26,11 +26,13 @@ To scroll, hold **Left Alt** and move the mouse up or down. Moving further from 
 
 - Choose **Left Ctrl** or **Left Alt** and assign each of the five buttons independently. **— Unassigned —** is the first option.
 - Scrolling uses the other left modifier automatically, or can be disabled. The setting displays the actual key.
+- Adjust **Scroll sensitivity** from **25% to 200%** using the slider below Scrolling. 100% is this version's standard setting. The value is saved between launches.
+- Use **Enable application**, next to Start with Windows, to pause or resume window controls and scrolling.
 - Add running applications to **Exclusions** using **+**. All windows of that executable will be ignored. Remove an entry with **×**.
 - Choose a light, dark or system theme, and Russian or English.
 - Enable **Start with Windows** to launch in the tray when you sign in. It stays off until you turn it on.
 
-Settings save immediately to `%LOCALAPPDATA%\Reswin\settings.xml`. Exclusions use the executable's full path; add an application again if that path changes.
+Settings save automatically to `%LOCALAPPDATA%\Reswin\settings.xml`. Exclusions use the executable's full path; add an application again if that path changes.
 
 Closing or minimizing settings hides the window in the system tray. Double-click the tray icon to reopen it. Use the tray menu to pause or exit. A second launch opens the existing instance.
 
@@ -50,15 +52,17 @@ To control an application running as administrator, Reswin needs the same privil
 | --- | --- |
 | `src/WindowEngine.cs`, `src/Native.cs`, `src/HoldScroll.cs`, `src/ScrollAnimator.cs` | Input hooks, window operations and hold-to-scroll |
 | `src/MainWindow.cs`, `src/Interface.cs` | Settings and application picker |
-| `src/Theme.cs`, `src/Interaction.cs`, `src/SmoothScrollViewer.cs` | Styling, motion and scrolling |
+| `src/Theme.cs`, `src/Interaction.cs`, `src/SmoothScrollViewer.cs`, `src/SensitivitySlider.cs` | Styling, motion, scrolling and sensitivity control |
 | `src/Settings.cs`, `src/Localization.cs`, `src/Startup.cs` | Persistence, languages and opt-in startup |
-| `src/Program.cs`, `src/TrayMenu.cs`, `src/Icons.cs` | Application lifecycle, tray menu and icons |
+| `src/Program.cs`, `src/TrayMenu.cs`, `src/Icons.cs`, `src/Typography.cs` | Application lifecycle, tray menu, icons and bundled fonts |
 | `src/TestSuite.cs`, `src/UiChecks.cs` | Window and interface checks |
 
 ## Changes
 
-See [what changed in 1.1.1](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.1).
+See [what changed in 1.1.2](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.2).
 
-## Icon credits
+## Font and icon credits
 
 Some interface icons are from [Lucide](https://lucide.dev/). Their license notices are in [assets/LUCIDE-LICENSE.txt](assets/LUCIDE-LICENSE.txt).
+
+The [Manrope](https://github.com/googlefonts/manrope) font is bundled with the application under the SIL Open Font License 1.1; no system font installation is needed. See [assets/fonts/OFL.txt](assets/fonts/OFL.txt) and [font provenance](assets/fonts/SOURCE.txt). The portable archive includes `ThirdPartyNotices.txt` with the font and icon licenses.
