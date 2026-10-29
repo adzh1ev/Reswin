@@ -19,11 +19,20 @@ namespace Reswin {
         IntPtr clickWindow;
         Native.Point clickPoint;
         int clickButton=-1,clickModifier;
-        int inputRevision;
         uint clickTime;
         volatile bool disposed;
         readonly object workLock=new object();
         readonly Dictionary<IntPtr,Queue<WindowRequest>> workers=new Dictionary<IntPtr,Queue<WindowRequest>>();
+        readonly object snapLock=new object();
+        readonly Dictionary<IntPtr,SideSnap> sideSnaps=new Dictionary<IntPtr,SideSnap>();
+        readonly string snapProperty="Reswin.SideSnap."+Guid.NewGuid().ToString("N");
+        int snapCookie;
+        sealed class SideSnap {
+            internal uint Process,Thread;
+            internal IntPtr Cookie;
+            internal Native.Rect Normal,Applied,PlacementNormal;
+            internal bool HavePlacement;
+        }
         internal sealed class WindowRequest {
             internal Gesture Gesture;
             internal Native.Point Point;
@@ -36,12 +45,14 @@ namespace Reswin {
             internal Native.Point Start,Latest;
             internal int Button,Edges,MinW=1,MinH=1,MaxW=100000,MaxH=100000;
             internal bool Initialized;
-            internal bool Dragged,ClickCancelled,CanMaximize,MoveMaximize,MaximizeOnly;
+            internal bool Dragged,ClickCancelled,CanMaximize,MoveMaximize,MaximizeOnly,RestoringSideSnap;
             internal int DragX,DragY,DoubleX,DoubleY,Modifier;
             internal uint Started,Dpi;
             internal IntPtr SnapMonitor;
-            internal IntPtr SnapForeground;
-            internal int SnapDirection,InputRevision;
+            internal int SnapDirection;
+            internal IntPtr EdgeMonitor;
+            internal Native.Rect EdgeBounds;
+            internal int EdgeDirection;
             internal WindowRequest QueuedRequest;
         }
         internal WindowEngine(Settings settings,Dispatcher dispatcher) {
@@ -70,9 +81,8 @@ namespace Reswin {
                 try {
                     var data=Marshal.PtrToStructure<Native.KeyData>(pointer);
                     if((data.Flags&0x10)==0) {
-                        if(message.ToInt32()==0x100 || message.ToInt32()==0x104) Interlocked.Increment(ref inputRevision);
                         if(scroll.HandleKey(message.ToInt32(),(int)data.Key,current==null,data.Scan,data.Flags)) return new IntPtr(1);
-                        if((message.ToInt32()==0x101 || message.ToInt32()==0x105) && data.Key==settings.Modifier) Cancel(false);
+                        if((message.ToInt32()==0x101 || message.ToInt32()==0x105) && data.Key==settings.Modifier) Cancel();
                     }
                 } catch { Cancel(); }
             }
@@ -101,7 +111,7 @@ namespace Reswin {
                 button=side==1?3:side==2?4:-1;
             }
             if(button<0) {
-                if(message==0x20A || message==0x20E) { Interlocked.Increment(ref inputRevision); ClearClick(); if(current!=null) current.ClickCancelled=true; }
+                if(message==0x20A || message==0x20E) { ClearClick(); if(current!=null) current.ClickCancelled=true; }
                 return false;
             }
             scroll.Stop();
@@ -115,7 +125,6 @@ namespace Reswin {
                 }
                 return true;
             }
-            Interlocked.Increment(ref inputRevision);
             if(suppressed[button]) return true;
             if(current!=null) { ClearClick(); current.ClickCancelled=true; suppressed[button]=true; return true; }
             if(!settings.Enabled || !modifierHeld) { ClearClick(); return false; }
@@ -164,6 +173,31 @@ namespace Reswin {
                 gesture.Dragged=true;
                 ClearClick();
             }
+            if(gesture.Action==WindowAction.Move && gesture.Dragged && settings.MaximizeOnTopEdge) UpdateEdge(gesture,point);
+        }
+        void UpdateEdge(Gesture gesture,Native.Point point) {
+            Native.Rect bounds=gesture.EdgeBounds;
+            if(gesture.EdgeMonitor==IntPtr.Zero || point.X<bounds.Left || point.X>=bounds.Right || point.Y<bounds.Top || point.Y>=bounds.Bottom) {
+                IntPtr monitor=Native.MonitorFromPoint(point,2);
+                var info=new Native.MonitorInfo(); info.Size=Marshal.SizeOf(info);
+                gesture.EdgeDirection=0;
+                if(monitor==IntPtr.Zero || !Native.GetMonitorInfo(monitor,ref info)) {gesture.EdgeMonitor=IntPtr.Zero; return;}
+                gesture.EdgeMonitor=monitor; gesture.EdgeBounds=bounds=info.Monitor;
+            }
+            // Match the usable edge gesture, not a two-pixel mouse-up target.
+            // Hysteresis retains a reached edge through small release jitter.
+            double scale=(gesture.Dpi==0?96:gesture.Dpi)/96.0;
+            int topEnter=Math.Min(Math.Max(1,bounds.Height/4),(int)Math.Ceiling(32*scale));
+            int topLeave=Math.Min(Math.Max(1,bounds.Height/4),(int)Math.Ceiling(48*scale));
+            int sideEnter=Math.Min(Math.Max(1,bounds.Width/4),(int)Math.Ceiling(120*scale));
+            int sideLeave=Math.Min(Math.Max(1,bounds.Width/4),(int)Math.Ceiling(152*scale));
+            int top=point.Y-bounds.Top,left=point.X-bounds.Left,right=bounds.Right-1-point.X;
+            int next=top<=topEnter?1:left<=sideEnter?2:right<=sideEnter?3:0;
+            if(next==0 && gesture.EdgeDirection!=0) {
+                int distance=gesture.EdgeDirection==1?top:gesture.EdgeDirection==2?left:right;
+                if(distance<=(gesture.EdgeDirection==1?topLeave:sideLeave)) next=gesture.EdgeDirection;
+            }
+            gesture.EdgeDirection=next;
         }
         void Finish(Gesture gesture,Native.Point point,bool modifierHeld) {
             UpdatePointer(gesture,point);
@@ -183,19 +217,10 @@ namespace Reswin {
             Schedule(gesture);
             if(!settings.Enabled || !modifierHeld || !settings.MaximizeOnTopEdge || !gesture.CanMaximize ||
                 gesture.ClickCancelled || settings.Modifier!=gesture.Modifier) return;
-            IntPtr monitor=Native.MonitorFromPoint(point,2);
-            var info=new Native.MonitorInfo(); info.Size=Marshal.SizeOf(info);
-            int edge=Math.Max(1,(int)Math.Ceiling(2.0*gesture.Dpi/96));
-            if(monitor!=IntPtr.Zero && Native.GetMonitorInfo(monitor,ref info) &&
-                point.X>=info.Monitor.Left && point.X<info.Monitor.Right &&
-                point.Y>=info.Monitor.Top && point.Y<info.Monitor.Bottom) {
-                // Top wins at corners; this setting exposes the three requested
-                // native arrangements rather than introducing quarter layouts.
-                int direction=point.Y<=info.Monitor.Top+edge?1:
-                    point.X<=info.Monitor.Left+edge?2:point.X>=info.Monitor.Right-1-edge?3:0;
-                if(direction!=0) Schedule(new Gesture {Window=gesture.Window,Action=WindowAction.Maximize,
-                    MoveMaximize=true,MaximizeOnly=true,SnapMonitor=monitor,SnapDirection=direction,
-                    Modifier=gesture.Modifier,InputRevision=Volatile.Read(ref inputRevision),SnapForeground=Native.GetForegroundWindow()});
+            if(gesture.EdgeMonitor!=IntPtr.Zero && gesture.EdgeDirection!=0) {
+                Schedule(new Gesture {Window=gesture.Window,Action=WindowAction.Maximize,
+                    MoveMaximize=true,MaximizeOnly=true,SnapMonitor=gesture.EdgeMonitor,SnapDirection=gesture.EdgeDirection,
+                    Modifier=gesture.Modifier});
             }
         }
         internal bool Eligible(IntPtr window,WindowAction action,out Native.Rect rect) {
@@ -278,38 +303,59 @@ namespace Reswin {
                 if(g.Initialized) return;
                 g.Initialized=true;
                 Native.Rect rect;
-                if(!settings.Enabled || !(g.MaximizeOnly?settings.MaximizeOnTopEdge:settings.MaximizeOnDoubleClick) ||
+                if(disposed || !settings.Enabled || !(g.MaximizeOnly?settings.MaximizeOnTopEdge:settings.MaximizeOnDoubleClick) ||
                     !Eligible(g.Window,WindowAction.Maximize,out rect)) return;
                 if(g.MaximizeOnly) {
-                    if(g.InputRevision!=Volatile.Read(ref inputRevision)) return;
-                    if(Native.IsZoomed(g.Window) || !PrepareSnap(g.Window,g.SnapMonitor,rect)) return;
-                    if(g.InputRevision!=Volatile.Read(ref inputRevision)) return;
-                    if(g.SnapDirection<=1) Native.ShowWindow(g.Window,3);
-                    else SnapSide(g);
-                } else Native.ShowWindow(g.Window,Native.IsZoomed(g.Window)?9:3);
-                // Unlike an asynchronous state change, completion here is ordered with
-                // all preceding moves and later gestures for this target window.
+                    if(Native.IsZoomed(g.Window)) return;
+                    if(g.SnapDirection>1) SnapSide(g.Window,g.SnapMonitor,g.SnapDirection==3,rect);
+                    else {
+                        var own=OwnSnap(g.Window,rect);
+                        if(own!=null && !RestoreNormal(g.Window,own,g.SnapMonitor)) return;
+                        if(!Native.GetWindowRect(g.Window,out rect) || !PrepareSnap(g.Window,g.SnapMonitor,rect)) return;
+                        Native.ShowWindow(g.Window,3);
+                    }
+                } else ToggleMaximize(g.Window,rect);
+                // Every state change completes on the window's worker, after its
+                // final Move and before any later gesture for this same window.
                 return;
             }
             if(g.Action==WindowAction.Minimize || g.Action==WindowAction.Maximize) {
                 if(!g.Initialized) {
                     g.Initialized=true;
-                    // Restore uses Windows' saved normal size and position.
-                    int command=g.Action==WindowAction.Minimize?6:Native.IsZoomed(g.Window)?9:3;
-                    Native.ShowWindowAsync(g.Window,command);
+                    if(g.Action==WindowAction.Minimize) Native.ShowWindowAsync(g.Window,6);
+                    else {
+                        Native.Rect rect;
+                        if(Native.GetWindowRect(g.Window,out rect)) ToggleMaximize(g.Window,rect);
+                    }
                 }
                 return;
             }
             if(!g.Initialized) {
                 g.Initialized=true;
-                if(g.Action==WindowAction.Move && (Native.IsZoomed(g.Window) || Native.IsArranged(g.Window))) {
-                    var placement=new Native.Placement(); placement.Length=Marshal.SizeOf(placement);
-                    if(!Native.GetWindowPlacement(g.Window,ref placement)) return;
-                    int width=placement.Normal.Width,height=placement.Normal.Height;
-                    double fraction=(g.Start.X-g.Origin.Left)/(double)Math.Max(1,g.Origin.Width);
-                    int x=g.Start.X-(int)(width*fraction),y=g.Start.Y-Math.Min(g.Start.Y-g.Origin.Top,height/2);
-                    g.Origin=new Native.Rect(x,y,x+width,y+height);
-                    Native.ShowWindow(g.Window,9);
+                Native.Rect currentRect;
+                if(!Native.GetWindowRect(g.Window,out currentRect)) return;
+                // Earlier requests can finish between this gesture's mouse-down
+                // and its first worker turn. Validate restore state against the
+                // current window, while keeping the original cursor anchor.
+                var own=OwnSnap(g.Window,currentRect);
+                bool arranged=g.Action==WindowAction.Move && Native.IsArranged(g.Window);
+                bool maximized=g.Action==WindowAction.Move && Native.IsZoomed(g.Window);
+                if(g.Action==WindowAction.Move && (own!=null || arranged || maximized)) {
+                    Native.Rect normal;
+                    if(own!=null) normal=own.Normal;
+                    else {
+                        var placement=new Native.Placement(); placement.Length=Marshal.SizeOf(placement);
+                        if(!Native.GetWindowPlacement(g.Window,ref placement)) return;
+                        // WINDOWPLACEMENT uses workspace coordinates. Only its
+                        // dimensions are used; the cursor supplies screen position.
+                        normal=placement.Normal;
+                    }
+                    g.Origin=AnchorRestore(g.Origin,normal,g.Start);
+                    g.RestoringSideSnap=own!=null;
+                    if(arranged || maximized) Native.ShowWindow(g.Window,9);
+                } else if(g.Action==WindowAction.Center && own!=null) {
+                    g.Origin=own.Normal;
+                    g.RestoringSideSnap=true;
                 }
                 if(g.Action==WindowAction.Resize) {
                     var limits=new Native.MinMax(); IntPtr result;
@@ -329,70 +375,160 @@ namespace Reswin {
             }
             Native.Rect actual;
             bool haveActual=Native.GetWindowRect(g.Window,out actual);
-            if(haveActual && actual.Left==target.Left && actual.Top==target.Top &&
-                actual.Width==target.Width && actual.Height==target.Height) return;
+            if(haveActual && SameRect(actual,target)) return;
             uint flags=0x4|0x10;
             if(haveActual && actual.Width==target.Width && actual.Height==target.Height) flags|=0x1;
             // Synchronous on the background worker: wait until this position has been
             // processed, then take the newest sample. ASYNCWINDOWPOS would defeat
             // coalescing by filling the receiving thread's queue with obsolete resizes.
-            Native.SetWindowPos(g.Window,IntPtr.Zero,target.Left,target.Top,target.Width,target.Height,flags);
+            if(Native.SetWindowPos(g.Window,IntPtr.Zero,target.Left,target.Top,target.Width,target.Height,flags) && g.RestoringSideSnap) {
+                ForgetSnap(g.Window);
+                g.RestoringSideSnap=false;
+            }
+        }
+        static bool SameRect(Native.Rect a,Native.Rect b) {
+            return a.Left==b.Left && a.Top==b.Top && a.Right==b.Right && a.Bottom==b.Bottom;
+        }
+        static Native.Rect VisibleNormal(Native.Rect rect,Native.Rect work) {
+            int x=rect.Width<=work.Width?Geometry.Clamp(rect.Left,work.Left,work.Right-rect.Width):work.Left+(work.Width-rect.Width)/2;
+            int y=rect.Height<=work.Height?Geometry.Clamp(rect.Top,work.Top,work.Bottom-rect.Height):work.Top;
+            return new Native.Rect(x,y,x+rect.Width,y+rect.Height);
+        }
+        static Native.Rect AnchorRestore(Native.Rect from,Native.Rect normal,Native.Point pointer) {
+            int width=Math.Max(1,normal.Width),height=Math.Max(1,normal.Height);
+            double fraction=Math.Max(0,Math.Min(1,(pointer.X-from.Left)/(double)Math.Max(1,from.Width)));
+            int x=pointer.X-(int)Math.Round(width*fraction);
+            int y=pointer.Y-Math.Min(Math.Max(0,pointer.Y-from.Top),height/2);
+            var info=new Native.MonitorInfo(); info.Size=Marshal.SizeOf(info);
+            if(Native.GetMonitorInfo(Native.MonitorFromPoint(pointer,2),ref info)) {
+                int title=Math.Min(height,Math.Max(24,Native.PointerMetric(4,96)));
+                x=Geometry.Clamp(x,info.Work.Left-width+Math.Min(width,title),info.Work.Right-Math.Min(width,title));
+                y=Geometry.Clamp(y,info.Work.Top,Math.Max(info.Work.Top,info.Work.Bottom-title));
+            }
+            return new Native.Rect(x,y,x+width,y+height);
+        }
+        SideSnap OwnSnap(IntPtr window,Native.Rect actual) {
+            lock(snapLock) {
+                SideSnap state;
+                if(!sideSnaps.TryGetValue(window,out state)) return null;
+                uint process; uint thread=Native.GetWindowThreadProcessId(window,out process);
+                bool valid=process==state.Process && thread==state.Thread && Native.GetProp(window,snapProperty)==state.Cookie;
+                if(valid && (Native.IsZoomed(window) || Native.IsIconic(window))) {
+                    var placement=new Native.Placement(); placement.Length=Marshal.SizeOf(placement);
+                    // Compare placement coordinates with the saved placement, never
+                    // with screen coordinates. Native move/resize must invalidate
+                    // our restore record even when followed by maximize/minimize.
+                    valid=state.HavePlacement && Native.GetWindowPlacement(window,ref placement) && SameRect(placement.Normal,state.PlacementNormal);
+                } else if(valid) valid=SameRect(actual,state.Applied);
+                if(valid) return state;
+                ForgetSnapLocked(window,state);
+                return null;
+            }
+        }
+        void ForgetSnapLocked(IntPtr window,SideSnap state) {
+            if(Native.GetProp(window,snapProperty)==state.Cookie) Native.RemoveProp(window,snapProperty);
+            sideSnaps.Remove(window);
+        }
+        void ForgetSnap(IntPtr window) {
+            lock(snapLock) {
+                SideSnap state;
+                if(sideSnaps.TryGetValue(window,out state)) ForgetSnapLocked(window,state);
+            }
+        }
+        bool RestoreNormal(IntPtr window,SideSnap state,IntPtr monitor) {
+            var info=new Native.MonitorInfo(); info.Size=Marshal.SizeOf(info);
+            if(monitor==IntPtr.Zero) monitor=Native.MonitorFromWindow(window,2);
+            if(!Native.GetMonitorInfo(monitor,ref info)) return false;
+            var rect=VisibleNormal(state.Normal,info.Work);
+            if(Native.IsZoomed(window) || Native.IsArranged(window)) Native.ShowWindow(window,9);
+            if(!Native.SetWindowPos(window,IntPtr.Zero,rect.Left,rect.Top,rect.Width,rect.Height,0x4|0x10)) return false;
+            ForgetSnap(window);
+            return true;
+        }
+        void ToggleMaximize(IntPtr window,Native.Rect actual) {
+            bool maximized=Native.IsZoomed(window);
+            var state=OwnSnap(window,actual);
+            if(state!=null) {
+                // Give Windows the original normal rectangle before maximizing,
+                // so its own Restore button also restores the original size.
+                if(!RestoreNormal(window,state,IntPtr.Zero)) return;
+                if(maximized) return;
+            }
+            Native.ShowWindow(window,maximized?9:3);
         }
         bool PrepareSnap(IntPtr window,IntPtr monitor,Native.Rect rect) {
             var info=new Native.MonitorInfo(); info.Size=Marshal.SizeOf(info);
             if(monitor==IntPtr.Zero || !Native.GetMonitorInfo(monitor,ref info) || info.Work.Width<=0 || info.Work.Height<=0) return false;
-            // Dragging from low in the content can leave the normal rectangle almost
-            // entirely above the display. Save a visible restore location before
-            // maximizing, with the same normal size and the taskbar left accessible.
-            int x=rect.Width<=info.Work.Width?Geometry.Clamp(rect.Left,info.Work.Left,info.Work.Right-rect.Width):info.Work.Left+(info.Work.Width-rect.Width)/2;
-            int y=rect.Height<=info.Work.Height?Geometry.Clamp(rect.Top,info.Work.Top,info.Work.Bottom-rect.Height):info.Work.Top;
-            if((rect.Left!=x || rect.Top!=y) && !Native.SetWindowPos(window,IntPtr.Zero,x,y,0,0,0x4|0x10|0x1)) return false;
+            // Maximize still uses Windows' normal state change, after giving it
+            // a visible restore location on the monitor reached by the pointer.
+            var visible=VisibleNormal(rect,info.Work);
+            if((rect.Left!=visible.Left || rect.Top!=visible.Top) && !Native.SetWindowPos(window,IntPtr.Zero,visible.Left,visible.Top,0,0,0x4|0x10|0x1)) return false;
             if(Native.MonitorFromWindow(window,2)==monitor) return true;
-            // Windows chooses the maximize display from the window, not the pointer.
-            // Centering first resolves drags between monitors without changing size.
-            x=info.Work.Left+(info.Work.Width-rect.Width)/2;
-            y=rect.Height<=info.Work.Height?info.Work.Top+(info.Work.Height-rect.Height)/2:info.Work.Top;
+            int x=info.Work.Left+(info.Work.Width-rect.Width)/2;
+            int y=rect.Height<=info.Work.Height?info.Work.Top+(info.Work.Height-rect.Height)/2:info.Work.Top;
             if(!Native.SetWindowPos(window,IntPtr.Zero,x,y,0,0,0x4|0x10|0x1)) return false;
-            // A target that refuses movement (or an oversized spanning window) must
-            // not unexpectedly maximize on another display.
             return Native.MonitorFromWindow(window,2)==monitor;
         }
-        void SnapSide(Gesture gesture) {
-            if(disposed || dispatcher.HasShutdownStarted || Native.IsArranged(gesture.Window)) return;
-            // Prepare/move stays on the worker. The final input transaction runs
-            // on the hook dispatcher, so no physical hook event can interleave
-            // state validation and generation of the ordered shortcut batch.
-            if(gesture.InputRevision!=Volatile.Read(ref inputRevision) ||
-                Native.GetForegroundWindow()!=gesture.SnapForeground || !Native.CanSendSnapKeys(gesture.Modifier)) return;
-            if(Native.GetForegroundWindow()!=gesture.Window) {
-                if(!Native.SetForegroundWindow(gesture.Window)) return;
-                // A successful cross-thread activation is asynchronous. Wait
-                // briefly for its message to be handled before testing focus,
-                // without attaching input queues or blocking our hook thread.
-                IntPtr result;
-                if(Native.SendMessageTimeoutValue(gesture.Window,0,IntPtr.Zero,IntPtr.Zero,2,100,out result)==IntPtr.Zero) return;
-                if(Native.GetForegroundWindow()!=gesture.Window) return;
+        static Native.Rect HalfFrame(IntPtr window,Native.Rect visible) {
+            Native.Rect outer,frame;
+            if(!Native.GetWindowRect(window,out outer) || Native.DwmGetWindowFrame(window,9,out frame,Marshal.SizeOf(typeof(Native.Rect)))!=0) return visible;
+            // GetWindowRect includes the invisible resize border; align the actual
+            // visible frame with the half-workarea, including on scaled displays.
+            int limit=(int)Math.Ceiling(64.0*Native.WindowDpi(window)/96);
+            int left=Geometry.Clamp(frame.Left-outer.Left,0,limit),top=Geometry.Clamp(frame.Top-outer.Top,0,limit);
+            int right=Geometry.Clamp(outer.Right-frame.Right,0,limit),bottom=Geometry.Clamp(outer.Bottom-frame.Bottom,0,limit);
+            return new Native.Rect(visible.Left-left,visible.Top-top,visible.Right+right,visible.Bottom+bottom);
+        }
+        void SnapSide(IntPtr window,IntPtr monitor,bool right,Native.Rect actual) {
+            if(disposed || (Native.GetWindowLongPtr(window,-16).ToInt64()&0x40000)==0) return;
+            var info=new Native.MonitorInfo(); info.Size=Marshal.SizeOf(info);
+            if(monitor==IntPtr.Zero || !Native.GetMonitorInfo(monitor,ref info) || info.Work.Width<2 || info.Work.Height<1) return;
+            // Both halves share this exact boundary: odd widths leave the extra
+            // pixel to the right, without gaps or overlap and with taskbars spared.
+            int middle=info.Work.Left+info.Work.Width/2;
+            var half=right?new Native.Rect(middle,info.Work.Top,info.Work.Right,info.Work.Bottom):new Native.Rect(info.Work.Left,info.Work.Top,middle,info.Work.Bottom);
+            var state=OwnSnap(window,actual);
+            bool created=state==null;
+            if(created) {
+                uint process; uint thread=Native.GetWindowThreadProcessId(window,out process);
+                if(process==0 || thread==0) return;
+                state=new SideSnap {Process=process,Thread=thread,Normal=VisibleNormal(actual,info.Work),Applied=actual};
+                lock(snapLock) {
+                    if(disposed) return;
+                    int cookie=unchecked(++snapCookie)&int.MaxValue;
+                    if(cookie==0) cookie=unchecked(++snapCookie)&int.MaxValue;
+                    state.Cookie=new IntPtr(cookie);
+                    // A per-window property disappears when HWND is destroyed;
+                    // PID/thread alone cannot detect handle reuse in one process.
+                    if(!Native.SetProp(window,snapProperty,state.Cookie)) return;
+                    sideSnaps[window]=state;
+                }
             }
-            bool sent=false;
-            dispatcher.Invoke(new Action(delegate {
-                Native.Rect currentRect;
-                if(disposed || current!=null || !settings.Enabled || !settings.MaximizeOnTopEdge ||
-                    settings.Modifier!=gesture.Modifier || gesture.InputRevision!=Volatile.Read(ref inputRevision) ||
-                    !Eligible(gesture.Window,WindowAction.Maximize,out currentRect) ||
-                    Native.MonitorFromWindow(gesture.Window,2)!=gesture.SnapMonitor || Native.IsArranged(gesture.Window) ||
-                    Native.GetForegroundWindow()!=gesture.Window) return;
-                sent=Native.SnapToSide(gesture.Window,gesture.SnapDirection==3,gesture.Modifier);
-            }),DispatcherPriority.Input);
-            if(!sent) return;
-            // Shell arrangement is asynchronous to SendInput. Let it commit
-            // before this window's worker accepts a subsequent Move request.
-            for(int attempt=0;attempt<25 && !disposed;attempt++) {
-                if(Native.IsArranged(gesture.Window) || Native.IsIconic(gesture.Window)) break;
-                Thread.Sleep(8);
+            var target=HalfFrame(window,half);
+            // Direct placement does not enter the shell's Snap workflow, so it
+            // cannot open Snap Assist or inject shortcuts into another app.
+            if(!Native.SetWindowPos(window,IntPtr.Zero,target.Left,target.Top,target.Width,target.Height,0x4|0x10)) {
+                if(created) ForgetSnap(window);
+                return;
+            }
+            // A cross-monitor DPI change can alter invisible frame thickness.
+            // Recalculate once after the target has processed its DPI messages.
+            var corrected=HalfFrame(window,half);
+            if(!SameRect(target,corrected)) Native.SetWindowPos(window,IntPtr.Zero,corrected.Left,corrected.Top,corrected.Width,corrected.Height,0x4|0x10);
+            Native.Rect applied;
+            if(!Native.GetWindowRect(window,out applied)) {ForgetSnap(window); return;}
+            var placement=new Native.Placement(); placement.Length=Marshal.SizeOf(placement);
+            bool havePlacement=Native.GetWindowPlacement(window,ref placement);
+            lock(snapLock) {
+                SideSnap saved;
+                if(disposed || !sideSnaps.TryGetValue(window,out saved) || saved!=state) {
+                    if(Native.GetProp(window,snapProperty)==state.Cookie) Native.RemoveProp(window,snapProperty);
+                    return;
+                }
+                state.Applied=applied; state.PlacementNormal=placement.Normal; state.HavePlacement=havePlacement;
             }
         }
-        internal void Cancel(bool cancelPendingSnap=true) {
-            if(cancelPendingSnap) Interlocked.Increment(ref inputRevision);
+        internal void Cancel() {
             scroll.Stop(); ClearClick();
             if(current!=null) {
                 var completed=current; current=null;
@@ -408,6 +544,12 @@ namespace Reswin {
                     queue.Clear();
                 }
                 workers.Clear();
+            }
+            lock(snapLock) {
+                foreach(var pair in sideSnaps) {
+                    if(Native.GetProp(pair.Key,snapProperty)==pair.Value.Cookie) Native.RemoveProp(pair.Key,snapProperty);
+                }
+                sideSnaps.Clear();
             }
             if(mouseHook!=IntPtr.Zero) Native.UnhookWindowsHookEx(mouseHook);
             if(keyHook!=IntPtr.Zero) Native.UnhookWindowsHookEx(keyHook);

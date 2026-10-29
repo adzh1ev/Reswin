@@ -56,11 +56,15 @@ namespace Reswin {
         [DllImport("user32.dll")] internal static extern bool ShowWindowAsync(IntPtr window,int command);
         [DllImport("user32.dll")] internal static extern bool ShowWindow(IntPtr window,int command);
         [DllImport("user32.dll")] internal static extern bool GetWindowPlacement(IntPtr window,ref Placement placement);
+        [DllImport("user32.dll",EntryPoint="SetPropW",CharSet=CharSet.Unicode,SetLastError=true)] internal static extern bool SetProp(IntPtr window,string name,IntPtr value);
+        [DllImport("user32.dll",EntryPoint="GetPropW",CharSet=CharSet.Unicode)] internal static extern IntPtr GetProp(IntPtr window,string name);
+        [DllImport("user32.dll",EntryPoint="RemovePropW",CharSet=CharSet.Unicode)] internal static extern IntPtr RemoveProp(IntPtr window,string name);
         [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(IntPtr window);
         [DllImport("kernel32.dll",SetLastError=true)] internal static extern IntPtr OpenProcess(uint access,bool inherit,uint id);
         [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] internal static extern bool QueryFullProcessImageName(IntPtr process,uint flags,StringBuilder path,ref int size);
         [DllImport("kernel32.dll")] internal static extern bool CloseHandle(IntPtr handle);
         [DllImport("dwmapi.dll")] internal static extern int DwmGetWindowAttribute(IntPtr window,int attribute,out int value,int size);
+        [DllImport("dwmapi.dll",EntryPoint="DwmGetWindowAttribute")] internal static extern int DwmGetWindowFrame(IntPtr window,int attribute,out Rect value,int size);
         [DllImport("advapi32.dll",SetLastError=true)] internal static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
         [DllImport("advapi32.dll",SetLastError=true)] internal static extern bool GetTokenInformation(IntPtr token,int type,IntPtr information,int length,out int returned);
         [DllImport("advapi32.dll")] internal static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
@@ -103,69 +107,6 @@ namespace Reswin {
             if(!arrangedAvailable) return false;
             try { return IsWindowArrangedCore(window); }
             catch(EntryPointNotFoundException) { arrangedAvailable=false; return false; }
-        }
-        static Input SnapKey(int key,bool up=false) {
-            bool extended=key==0x5B || key==0x25 || key==0x27;
-            return new Input {Type=1,Keyboard=new KeyboardInput {Key=(ushort)key,Flags=(extended?1u:0u)|(up?2u:0u)}};
-        }
-        internal static bool CanSendSnapKeys(int modifier) {
-            if(modifier!=0xA2 && modifier!=0xA4) return false;
-            // Never turn Ctrl+Win+Arrow into a desktop switch, or temporarily
-            // release a user's extra Shift/Win/AltGr/other shortcut combination.
-            for(int key=1;key<256;key++) {
-                if(key==modifier || key==(modifier==0xA2?0x11:0x12)) continue;
-                if((GetAsyncKeyState(key)&0x8000)!=0) return false;
-            }
-            return true;
-        }
-        internal static bool SnapToSide(IntPtr window,bool right,int modifier) {
-            if(GetForegroundWindow()!=window || !CanSendSnapKeys(modifier)) return false;
-            bool held=(GetAsyncKeyState(modifier)&0x8000)!=0;
-            int arrow=right?0x27:0x25;
-            var sequence=new System.Collections.Generic.List<Input>();
-            // Focus may have moved from the previously active application.
-            // Mask Alt in this target too before its temporary key-up.
-            if(held && modifier==0xA4) { sequence.Add(SnapKey(0xE8)); sequence.Add(SnapKey(0xE8,true)); }
-            if(held) sequence.Add(SnapKey(modifier,true));
-            sequence.Add(SnapKey(0x5B)); sequence.Add(SnapKey(arrow));
-            sequence.Add(SnapKey(arrow,true)); sequence.Add(SnapKey(0x5B,true));
-            if(held) {
-                sequence.Add(SnapKey(modifier));
-                // A restored Alt must not become a bare menu key on its real up.
-                if(modifier==0xA4) { sequence.Add(SnapKey(0xE8)); sequence.Add(SnapKey(0xE8,true)); }
-            }
-            // SendInput guarantees this complete array is not interleaved with
-            // physical input. Existing key state is accounted for above.
-            Input[] inputs=sequence.ToArray();
-            uint sent=Inject(inputs);
-            if(sent==inputs.Length) return true;
-            if(sent==0) return false;
-            // If an input filter accepts only a prefix, balance only our downs;
-            // never replay a rejected arrow without its Windows modifier.
-            bool winDown=false,arrowDown=false,modifierReleased=false,maskDown=false;
-            bool modifierRestored=false,maskAfterRestore=false;
-            for(int i=0;i<Math.Min((int)sent,inputs.Length);i++) {
-                int key=inputs[i].Keyboard.Key; bool up=(inputs[i].Keyboard.Flags&2)!=0;
-                if(key==0x5B) winDown=!up;
-                else if(key==arrow) arrowDown=!up;
-                else if(key==modifier) { modifierReleased=up; if(!up) modifierRestored=true; }
-                else if(key==0xE8) { maskDown=!up; if(!up && modifierRestored) maskAfterRestore=true; }
-            }
-            var balance=new System.Collections.Generic.List<Input>();
-            if(maskDown) balance.Add(SnapKey(0xE8,true));
-            if(arrowDown) balance.Add(SnapKey(arrow,true));
-            if(winDown) {
-                balance.Add(SnapKey(0xE8)); balance.Add(SnapKey(0xE8,true));
-                balance.Add(SnapKey(0x5B,true));
-            }
-            if(modifierReleased) {
-                balance.Add(SnapKey(modifier));
-                if(modifier==0xA4) { balance.Add(SnapKey(0xE8)); balance.Add(SnapKey(0xE8,true)); }
-            } else if(modifier==0xA4 && modifierRestored && !maskAfterRestore) {
-                balance.Add(SnapKey(0xE8)); balance.Add(SnapKey(0xE8,true));
-            }
-            if(balance.Count!=0) Inject(balance.ToArray());
-            return false;
         }
         internal static void MaskAltMenu() {
             // An otherwise unused key prevents a consumed Alt+mouse gesture from

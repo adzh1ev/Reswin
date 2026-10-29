@@ -34,7 +34,7 @@ namespace Reswin {
         internal MainWindow(Settings settings,Action changed,bool preview=false,int initialTab=0) {
             this.settings=settings; this.changed=changed;
             SetResourceReference(StyleProperty,typeof(Window));
-            Title="Reswin 1.1.3"; Width=500; Height=Math.Min(compact?512:576,SystemParameters.WorkArea.Height);
+            Title="Reswin 1.1.4"; Width=500; Height=Math.Min(compact?512:576,SystemParameters.WorkArea.Height);
             MinWidth=500; MinHeight=Math.Min(480,SystemParameters.WorkArea.Height);
             WindowStyle=WindowStyle.SingleBorderWindow; ResizeMode=ResizeMode.CanMinimize; WindowStartupLocation=WindowStartupLocation.CenterScreen;
             var body=new Border(); body.SetResourceReference(Border.BackgroundProperty,"BackgroundBrush"); Content=body;
@@ -213,7 +213,7 @@ namespace Reswin {
             var names=new[]{"Левая кнопка","Правая кнопка","Средняя кнопка","Боковая назад","Боковая вперёд"};
             for(int button=0;button<names.Length;button++) if(settings.Action(button)==WindowAction.Move) moveButtons.Add(L.T(names[button]));
             string assignment=moveButtons.Count==0?L.T("Сначала назначьте действие «Перемещение» кнопке мыши."):string.Format(L.T("Для перемещения: {0}."),string.Join(" / ",moveButtons.ToArray()));
-            string topHint=assignment+"\n\n"+string.Format(L.T("Удерживайте {0} и кнопку мыши с действием «Перемещение». Доведите курсор до верхнего, левого или правого края экрана и отпустите кнопку мыши. Верхний край разворачивает окно; боковые края размещают его на соответствующей половине экрана."),modifier);
+            string topHint=assignment+"\n\n"+string.Format(L.T("Удерживайте {0} и кнопку мыши с действием «Перемещение». Доведите курсор до верхнего, левого или правого края экрана и отпустите кнопку мыши. Верхний край разворачивает окно; боковые края размещают его на соответствующей половине экрана. Предложение выбрать второе окно не появляется."),modifier);
             string doubleHint=assignment+"\n\n"+string.Format(L.T("Удерживайте {0} и дважды нажмите кнопку мыши с действием «Перемещение» в любой части окна. Окно развернётся; повторное двойное нажатие вернёт прежний размер и положение."),modifier);
             maximizeAtTop.ToolTip=topHint; maximizeDoubleClick.ToolTip=doubleHint;
             AutomationProperties.SetHelpText(maximizeAtTop,topHint); AutomationProperties.SetHelpText(maximizeDoubleClick,doubleHint);

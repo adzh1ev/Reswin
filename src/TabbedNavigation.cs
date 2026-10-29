@@ -16,12 +16,12 @@ namespace Reswin {
     internal sealed class TabbedNavigation : Grid {
         const double HeaderHeight=40,SlideDistance=32;
         readonly TabControl tabs;
-        readonly Grid header=new Grid {Height=HeaderHeight};
+        readonly Grid header=new Grid {Height=HeaderHeight,Background=Brushes.Transparent,Cursor=Cursors.Hand,Clip=System.Windows.Media.Geometry.Empty};
         readonly Grid viewport=new Grid {ClipToBounds=true};
-        readonly Border indicator=new Border {CornerRadius=new CornerRadius(10),HorizontalAlignment=HorizontalAlignment.Left,Margin=new Thickness(2,0,0,0),IsHitTestVisible=false};
+        readonly Border indicator=new Border {CornerRadius=new CornerRadius(9),HorizontalAlignment=HorizontalAlignment.Left,IsHitTestVisible=false};
         readonly TranslateTransform indicatorPosition=new TranslateTransform();
         readonly TranslateTransform dragCorrection=new TranslateTransform();
-        readonly RectangleGeometry indicatorClip=new RectangleGeometry {RadiusX=10,RadiusY=10};
+        readonly RectangleGeometry indicatorClip=new RectangleGeometry {RadiusX=9,RadiusY=9};
         readonly Grid activeHeaders=new DecorativeHeaderLayer {IsHitTestVisible=false};
         readonly Page[] pages;
         int selected,generation;
@@ -29,6 +29,7 @@ namespace Reswin {
         Point pressedPoint;
         int pressedTab;
         double grabOffset;
+        System.Windows.Media.Geometry stripShape;
         internal event Action<int> SelectionChanged;
 
         sealed class Page {
@@ -54,8 +55,8 @@ namespace Reswin {
             pages=new Page[content.Length];
             RowDefinitions.Add(new RowDefinition {Height=GridLength.Auto});
             RowDefinitions.Add(new RowDefinition {Height=new GridLength(1,GridUnitType.Star)});
-            var shell=new Border {CornerRadius=new CornerRadius(14),Padding=new Thickness(4),Margin=new Thickness(0,0,0,14)};
-            shell.SetResourceReference(Border.BackgroundProperty,"NavigationBrush"); shell.Child=header; Children.Add(shell);
+            var shell=new Border {Margin=new Thickness(0,0,0,14),Child=header}; Children.Add(shell);
+            header.SetResourceReference(Panel.BackgroundProperty,"NavigationBrush");
             Grid.SetRow(viewport,1); Children.Add(viewport);
             KeyboardNavigation.SetTabNavigation(this,KeyboardNavigationMode.Continue);
 
@@ -65,8 +66,8 @@ namespace Reswin {
             tabs.ItemsPanel=new ItemsPanelTemplate(panel);
             tabs.Template=(ControlTemplate)XamlReader.Parse(@"<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='TabControl'><ItemsPresenter/></ControlTemplate>");
             var itemTemplate=(ControlTemplate)XamlReader.Parse(@"<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='TabItem'>
- <Grid Margin='2,0'><Border CornerRadius='10' Background='{DynamicResource SurfaceBrush}' BorderBrush='{DynamicResource LineBrush}' BorderThickness='1'/>
-  <Border x:Name='Hover' CornerRadius='10' Background='{DynamicResource NavigationHoverBrush}' Opacity='0'/>
+ <Grid Margin='3,0' Background='Transparent'>
+  <Border x:Name='Hover' CornerRadius='9' Background='{DynamicResource NavigationHoverBrush}' Opacity='0'/>
   <ContentPresenter ContentSource='Header' HorizontalAlignment='Center' VerticalAlignment='Center' Margin='8,0'/>
  </Grid>
  <ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'>
@@ -101,10 +102,10 @@ namespace Reswin {
             header.PreviewMouseMove+=MovePointer;
             header.PreviewMouseLeftButtonUp+=EndPointer;
             header.LostMouseCapture+=delegate {if(pointerPressed) CancelPointer(true);};
-            header.SizeChanged+=delegate {CancelPointer(false); UpdateIndicator(false);};
+            header.SizeChanged+=delegate {CancelPointer(false); UpdateStripGeometry(); UpdateIndicator(false);};
             IsEnabledChanged+=delegate {if(!IsEnabled) CancelPointer(true);};
             IsVisibleChanged+=delegate {if(!IsVisible) {CancelPointer(false); UpdateIndicator(false);}};
-            Loaded+=delegate {ready=true; SnapPages(); UpdateIndicator(false);};
+            Loaded+=delegate {ready=true; UpdateStripGeometry(); SnapPages(); UpdateIndicator(false);};
             Unloaded+=delegate {CancelPointer(false); ready=false; generation++; SnapPages(); UpdateIndicator(false);};
             PreviewKeyDown+=NavigateByKeyboard;
             SnapPages();
@@ -130,6 +131,7 @@ namespace Reswin {
         }
         int TabAt(Point point) {
             if(header.ActualWidth<=0 || point.X<0 || point.X>=header.ActualWidth || point.Y<0 || point.Y>header.ActualHeight) return -1;
+            if(stripShape!=null && !stripShape.FillContains(point)) return -1;
             int index=Math.Min(pages.Length-1,(int)(point.X/(header.ActualWidth/pages.Length)));
             return ((TabItem)tabs.Items[index]).IsEnabled?index:-1;
         }
@@ -233,10 +235,62 @@ namespace Reswin {
         void UpdateIndicator(bool animate) {
             double slot=header.ActualWidth/pages.Length;
             if(slot<=0) return;
-            indicator.Width=Math.Max(0,slot-4); indicator.Height=HeaderHeight;
-            indicatorClip.Rect=new Rect(2,0,Math.Max(0,slot-4),HeaderHeight);
+            indicator.Width=slot; indicator.Height=HeaderHeight;
+            indicatorClip.Rect=new Rect(0,0,slot,HeaderHeight);
             if(animate) Animate(indicatorPosition,TranslateTransform.XProperty,slot*selected,220,null);
             else Set(indicatorPosition,TranslateTransform.XProperty,slot*selected);
+        }
+        void UpdateStripGeometry() {
+            double width=header.ActualWidth,slot=width/pages.Length;
+            if(width<=0) return;
+            // One silhouette owns the background and ALL animated layers. The
+            // coral selection cannot paint in a notch or beyond an outer cap.
+            // Segments have 9-DIP corners, with 6-DIP seams bridged by a 16-DIP
+            // central neck. Circular concave fillets keep each joint tangent.
+            double inset=Math.Min(3,slot/8);
+            double radius=Math.Min(9,(slot-2*inset)/2);
+            double join=Math.Min(3,inset),depth=radius+join;
+            double bottom=HeaderHeight-depth;
+            var corner=new Size(radius,radius); var fillet=new Size(join,join);
+            var geometry=new StreamGeometry();
+            using(var draw=geometry.Open()) {
+                draw.BeginFigure(new Point(inset+radius,0),true,true);
+                for(int i=0;i<pages.Length;i++) {
+                    double right=(i+1)*slot-inset;
+                    draw.LineTo(new Point(right-radius,0),true,false);
+                    draw.ArcTo(new Point(right,radius),corner,0,false,SweepDirection.Clockwise,true,false);
+                    if(i+1<pages.Length) {
+                        double next=(i+1)*slot+inset;
+                        draw.LineTo(new Point(right,depth-join),true,false);
+                        draw.ArcTo(new Point(right+join,depth),fillet,0,false,SweepDirection.Counterclockwise,true,false);
+                        draw.LineTo(new Point(next-join,depth),true,false);
+                        draw.ArcTo(new Point(next,depth-join),fillet,0,false,SweepDirection.Counterclockwise,true,false);
+                        draw.LineTo(new Point(next,radius),true,false);
+                        draw.ArcTo(new Point(next+radius,0),corner,0,false,SweepDirection.Clockwise,true,false);
+                    }
+                }
+                double outerRight=width-inset;
+                draw.LineTo(new Point(outerRight,HeaderHeight-radius),true,false);
+                draw.ArcTo(new Point(outerRight-radius,HeaderHeight),corner,0,false,SweepDirection.Clockwise,true,false);
+                for(int i=pages.Length-1;i>=0;i--) {
+                    double left=i*slot+inset;
+                    draw.LineTo(new Point(left+radius,HeaderHeight),true,false);
+                    draw.ArcTo(new Point(left,HeaderHeight-radius),corner,0,false,SweepDirection.Clockwise,true,false);
+                    if(i>0) {
+                        double previous=i*slot-inset;
+                        draw.LineTo(new Point(left,bottom+join),true,false);
+                        draw.ArcTo(new Point(left-join,bottom),fillet,0,false,SweepDirection.Counterclockwise,true,false);
+                        draw.LineTo(new Point(previous+join,bottom),true,false);
+                        draw.ArcTo(new Point(previous,bottom+join),fillet,0,false,SweepDirection.Counterclockwise,true,false);
+                        draw.LineTo(new Point(previous,HeaderHeight-radius),true,false);
+                        draw.ArcTo(new Point(previous-radius,HeaderHeight),corner,0,false,SweepDirection.Clockwise,true,false);
+                    }
+                }
+                draw.LineTo(new Point(inset,radius),true,false);
+                draw.ArcTo(new Point(inset+radius,0),corner,0,false,SweepDirection.Clockwise,true,false);
+            }
+            geometry.Freeze(); stripShape=geometry;
+            header.Clip=geometry;
         }
         void SnapPages() {
             foreach(var page in pages) {

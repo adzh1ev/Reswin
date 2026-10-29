@@ -20,7 +20,7 @@ namespace Reswin {
             {"Двойное нажатие","Double click"},
             {"Для перемещения: {0}.","Move button: {0}."},
             {"Сначала назначьте действие «Перемещение» кнопке мыши.","First assign Move to a mouse button."},
-            {"Удерживайте {0} и кнопку мыши с действием «Перемещение». Доведите курсор до верхнего, левого или правого края экрана и отпустите кнопку мыши. Верхний край разворачивает окно; боковые края размещают его на соответствующей половине экрана.","Hold {0} and the mouse button assigned to Move. Drag the pointer to the top, left or right edge of the screen, then release the mouse button. The top edge maximizes the window; the side edges place it on the corresponding half of the screen."},
+            {"Удерживайте {0} и кнопку мыши с действием «Перемещение». Доведите курсор до верхнего, левого или правого края экрана и отпустите кнопку мыши. Верхний край разворачивает окно; боковые края размещают его на соответствующей половине экрана. Предложение выбрать второе окно не появляется.","Hold {0} and the mouse button assigned to Move. Drag the pointer to the top, left or right edge of the screen, then release the mouse button. The top edge maximizes the window; the side edges place it on the corresponding half of the screen. No second-window suggestions are shown."},
             {"Удерживайте {0} и дважды нажмите кнопку мыши с действием «Перемещение» в любой части окна. Окно развернётся; повторное двойное нажатие вернёт прежний размер и положение.","Hold {0} and double-click the mouse button assigned to Move anywhere inside a window. The window maximizes; double-click again to restore its previous size and position."},
             {"Прокрутка","Scrolling"},
             {"Чувствительность","Sensitivity"},

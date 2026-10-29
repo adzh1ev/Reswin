@@ -1,5 +1,40 @@
 # Изменения Reswin / Reswin changelog
 
+## 1.1.4
+
+# Русский
+
+## Что нового в Reswin 1.1.4
+
+- **Привязка без предложений Windows.** При перетаскивании к левому или правому краю окно занимает соответствующую половину рабочей области. Панель Snap Assist с выбором второго приложения больше не открывается. Верхний край по-прежнему разворачивает окно.
+- **Более широкие боковые зоны.** Зона срабатывания увеличена до 120 логических пикселей. После активации привязка сохраняется до 152 пикселей от края, чтобы небольшое обратное движение курсора не сбрасывало её. Размер зон учитывает масштаб экрана.
+- **Восстановление размера при откреплении.** Когда вы снова начинаете перемещать закреплённое окно, оно возвращается к прежнему размеру и остаётся под курсором.
+- **Соединённые вкладки.** «Управление», «Чёрный список» и «Настройки» объединены плавными перемычками. Коралловое выделение мягко перемещается между ними и остаётся внутри общего контура при переключении и перетаскивании.
+
+## Как обновиться
+
+Выйдите из работающего Reswin через меню в трее, распакуйте новый `Reswin-portable.zip` в постоянную папку и запустите `Reswin.exe`. Настройки и чёрный список сохраняются. Установка приложения или шрифта не требуется.
+
+Требования: Windows 10/11 x64 и .NET Framework 4.8. Размещение учитывает рабочую область монитора; приложения с ограничениями размера окна могут занимать больше половины экрана.
+
+---
+
+# English
+
+## What's new in Reswin 1.1.4
+
+- **Side placement without Windows suggestions.** Dragging a window to the left or right edge places it on that half of the work area. The Snap Assist panel for choosing a second application no longer opens. The top edge still maximizes the window.
+- **Wider side activation zones.** The activation zone now extends up to 120 logical pixels from each side. Once activated, it remains active up to 152 pixels from the edge, so a small movement back does not cancel it. Zone sizes follow display scaling.
+- **Restore the original size when detaching.** Moving a side-placed window again restores its previous size and keeps it under the pointer.
+- **Connected tabs.** Controls, Exclusions and Settings are joined by smooth connectors. The coral selection moves smoothly between them and stays within the shared outline during both switching and dragging.
+
+## How to update
+
+Exit the running instance of Reswin using the system tray menu, extract the new `Reswin-portable.zip` to a permanent folder, and launch `Reswin.exe`. Your settings and exclusions are preserved. No application or font installation is required.
+
+Requirements: Windows 10/11 x64 and .NET Framework 4.8. Placement respects the monitor work area; applications with minimum window size limits may occupy more than half the screen.
+
+
 ## 1.1.3
 
 # Русский

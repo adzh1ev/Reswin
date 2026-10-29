@@ -2,7 +2,7 @@
 
 A small Windows utility that lets you move and resize windows from anywhere inside them. Hold a modifier key, then use your mouse.
 
-[Download 1.1.3](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.3) · [Русский](README.ru.md)
+[Download 1.1.4](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.4) · [Русский](README.ru.md)
 
 ## Get started
 
@@ -20,7 +20,7 @@ A small Windows utility that lets you move and resize windows from anywhere insi
 
 Release the button or modifier to end a drag. Centering respects the monitor's work area, including the taskbar.
 
-Hold the selected modifier and double-click the mouse button assigned to **Move** to maximize or restore a window. To snap by dragging, move the pointer to an edge of the destination monitor and release the mouse button: the top maximizes the window, while the left and right edges use Windows Snap for that half of the screen. Both gestures are enabled by default and have separate switches in the top settings group.
+Hold the selected modifier and double-click the mouse button assigned to **Move** to maximize or restore a window. To snap by dragging, move the pointer to an edge of the destination monitor and release the mouse button: the top maximizes the window, while the left and right edges place the window on that half of the work area without opening second-window suggestions. Both gestures are enabled by default and have separate switches in the top settings group.
 
 To scroll, hold **Left Alt** and move the mouse up or down. Moving further from the starting point scrolls faster; release the key to stop. If window controls use Left Alt, scrolling automatically uses **Left Ctrl** instead. Choose **— Unassigned —** under Scrolling to disable it.
 
@@ -64,7 +64,7 @@ To control an application running as administrator, Reswin needs the same privil
 
 ## Changes
 
-See [what changed in 1.1.3](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.3).
+See [what changed in 1.1.4](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.4).
 
 ## Font and icon credits
 
