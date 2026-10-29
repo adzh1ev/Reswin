@@ -2,7 +2,7 @@
 
 A small Windows utility that lets you move and resize windows from anywhere inside them. Hold a modifier key, then use your mouse.
 
-[Download 1.1.2](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.2) · [Русский](README.ru.md)
+[Download 1.1.3](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.3) · [Русский](README.ru.md)
 
 ## Get started
 
@@ -20,11 +20,14 @@ A small Windows utility that lets you move and resize windows from anywhere insi
 
 Release the button or modifier to end a drag. Centering respects the monitor's work area, including the taskbar.
 
+Hold the selected modifier and double-click the mouse button assigned to **Move** to maximize or restore a window. To maximize by dragging, move the pointer to the top edge of the destination monitor and release the mouse button. Both gestures are enabled by default and have separate switches in the top settings group.
+
 To scroll, hold **Left Alt** and move the mouse up or down. Moving further from the starting point scrolls faster; release the key to stop. If window controls use Left Alt, scrolling automatically uses **Left Ctrl** instead. Choose **— Unassigned —** under Scrolling to disable it.
 
 ## Settings
 
 - Choose **Left Ctrl** or **Left Alt** and assign each of the five buttons independently. **— Unassigned —** is the first option.
+- Turn **Maximize at top edge** and **Double-click to maximize** on or off independently. They use the mouse button assigned to Move.
 - Scrolling uses the other left modifier automatically, or can be disabled. The setting displays the actual key.
 - Adjust **Scroll sensitivity** from **25% to 200%** using the slider below Scrolling. 100% is this version's standard setting. The value is saved between launches.
 - Use **Enable application**, next to Start with Windows, to pause or resume window controls and scrolling.
@@ -42,7 +45,7 @@ Closing or minimizing settings hides the window in the system tray. Double-click
 
 Windows 10/11 x64 with .NET Framework 4.8 and WPF. The application uses C#, WPF and Windows APIs, without third-party packages, a browser engine or network requests.
 
-Moving a maximized window restores it first. Resize and center actions skip maximized windows. Fixed-size windows cannot be resized. Desktop, taskbar, hidden and some full-screen windows are ignored.
+Dragging a maximized window restores it once the pointer moves beyond the drag threshold. The two new gestures only maximize windows that support maximizing. Resize and center actions skip maximized windows. Fixed-size windows cannot be resized. Desktop, taskbar, hidden and some full-screen windows are ignored.
 
 To control an application running as administrator, Reswin needs the same privilege level. Applications with custom frames, games and shared host processes may behave differently. Mixed-DPI multi-monitor setups still need hardware-specific validation.
 
@@ -59,7 +62,7 @@ To control an application running as administrator, Reswin needs the same privil
 
 ## Changes
 
-See [what changed in 1.1.2](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.2).
+See [what changed in 1.1.3](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.3).
 
 ## Font and icon credits
 

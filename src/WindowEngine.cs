@@ -16,6 +16,10 @@ namespace Reswin {
         readonly bool[] suppressed=new bool[5];
         IntPtr mouseHook,keyHook;
         Gesture current;
+        IntPtr clickWindow;
+        Native.Point clickPoint;
+        int clickButton=-1,clickModifier;
+        uint clickTime;
         volatile bool disposed;
         readonly object workLock=new object();
         readonly Dictionary<IntPtr,Queue<WindowRequest>> workers=new Dictionary<IntPtr,Queue<WindowRequest>>();
@@ -31,6 +35,10 @@ namespace Reswin {
             internal Native.Point Start,Latest;
             internal int Button,Edges,MinW=1,MinH=1,MaxW=100000,MaxH=100000;
             internal bool Initialized;
+            internal bool Dragged,ClickCancelled,CanMaximize,MoveMaximize,MaximizeOnly;
+            internal int DragX,DragY,DoubleX,DoubleY,Modifier;
+            internal uint Started,Dpi;
+            internal IntPtr SnapMonitor;
             internal WindowRequest QueuedRequest;
         }
         internal WindowEngine(Settings settings,Dispatcher dispatcher) {
@@ -78,7 +86,9 @@ namespace Reswin {
                 // Observe movement without consuming it: swallowing WM_MOUSEMOVE
                 // freezes the OS cursor, so subsequent relative input never
                 // accumulates and the final button-up resets the window position.
-                current.Latest=point; Schedule(current); return false;
+                UpdatePointer(current,point);
+                if(current.Action!=WindowAction.Move || current.Dragged) Schedule(current);
+                return false;
             }
             int button=message==0x201 || message==0x202?0:message==0x204 || message==0x205?1:message==0x207 || message==0x208?2:-1;
             // WM_XBUTTONDOWN/UP: high word identifies XBUTTON1 (back) or XBUTTON2 (forward).
@@ -86,28 +96,96 @@ namespace Reswin {
                 uint side=(mouseData>>16)&0xFFFF;
                 button=side==1?3:side==2?4:-1;
             }
-            if(button<0) return false;
+            if(button<0) {
+                if(message==0x20A || message==0x20E) { ClearClick(); if(current!=null) current.ClickCancelled=true; }
+                return false;
+            }
             scroll.Stop();
             bool down=message==0x201 || message==0x204 || message==0x207 || message==0x20B;
             if(!down) {
                 if(!suppressed[button]) return false;
                 suppressed[button]=false;
-                if(current!=null && current.Button==button) { current.Latest=point; Cancel(); }
+                if(current!=null && current.Button==button) {
+                    var completed=current; current=null;
+                    Finish(completed,point,modifierHeld);
+                }
                 return true;
             }
             if(suppressed[button]) return true;
-            if(current!=null) { suppressed[button]=true; return true; }
-            if(!settings.Enabled || !modifierHeld) return false;
-            WindowAction action=settings.Action(button); if(action==WindowAction.None) return false;
+            if(current!=null) { ClearClick(); current.ClickCancelled=true; suppressed[button]=true; return true; }
+            if(!settings.Enabled || !modifierHeld) { ClearClick(); return false; }
+            WindowAction action=settings.Action(button); if(action==WindowAction.None) { ClearClick(); return false; }
             IntPtr window=Native.GetAncestor(Native.WindowFromPoint(point),2);
             Native.Rect rect;
-            if(!Eligible(window,action,out rect)) return false;
+            if(!Eligible(window,action,out rect)) { ClearClick(); return false; }
             suppressed[button]=true;
             if(settings.Modifier==0xA4) Native.MaskAltMenu();
             var gesture=new Gesture { Window=window,Action=action,Origin=rect,Start=point,Latest=point,Button=button,Edges=Geometry.Edges(rect,point) };
+            if(action==WindowAction.Move) {
+                gesture.Started=unchecked((uint)Environment.TickCount);
+                gesture.Modifier=settings.Modifier; gesture.Dpi=Native.WindowDpi(window);
+                gesture.DragX=Native.PointerMetric(68,gesture.Dpi); gesture.DragY=Native.PointerMetric(69,gesture.Dpi);
+                // Windows reports the full double-click rectangle, centered at the first down.
+                gesture.DoubleX=Native.PointerMetric(36,gesture.Dpi)/2; gesture.DoubleY=Native.PointerMetric(37,gesture.Dpi)/2;
+                gesture.CanMaximize=CanMaximize(window);
+                bool doubleClick=settings.MaximizeOnDoubleClick && gesture.CanMaximize &&
+                    clickWindow==window && clickButton==button && clickModifier==settings.Modifier &&
+                    unchecked(gesture.Started-clickTime)<=Native.GetDoubleClickTime() &&
+                    Math.Abs((long)point.X-clickPoint.X)<=gesture.DoubleX && Math.Abs((long)point.Y-clickPoint.Y)<=gesture.DoubleY;
+                ClearClick();
+                if(doubleClick) {
+                    Schedule(new Gesture {Window=window,Action=WindowAction.Maximize,MoveMaximize=true});
+                    return true;
+                }
+                // A click must not restore a maximized window before a possible second click.
+                // Start moving only once the system drag threshold is crossed.
+                current=gesture;
+                return true;
+            }
+            ClearClick();
             if(action==WindowAction.Move || action==WindowAction.Resize) current=gesture;
             Schedule(gesture);
             return true;
+        }
+        void ClearClick() { clickWindow=IntPtr.Zero; clickButton=-1; }
+        bool CanMaximize(IntPtr window) {
+            uint process; Native.GetWindowThreadProcessId(window,out process);
+            return process!=ownProcess && (Native.GetWindowLongPtr(window,-16).ToInt64()&0x10000)!=0;
+        }
+        void UpdatePointer(Gesture gesture,Native.Point point) {
+            gesture.Latest=point;
+            if(gesture.Action==WindowAction.Move && !gesture.Dragged &&
+                (Math.Abs((long)point.X-gesture.Start.X)>gesture.DragX || Math.Abs((long)point.Y-gesture.Start.Y)>gesture.DragY)) {
+                gesture.Dragged=true;
+                ClearClick();
+            }
+        }
+        void Finish(Gesture gesture,Native.Point point,bool modifierHeld) {
+            UpdatePointer(gesture,point);
+            if(gesture.Action!=WindowAction.Move) { Schedule(gesture); return; }
+            if(!gesture.Dragged) {
+                ClearClick();
+                uint now=unchecked((uint)Environment.TickCount);
+                if(settings.Enabled && modifierHeld && settings.MaximizeOnDoubleClick && gesture.CanMaximize && !gesture.ClickCancelled &&
+                    settings.Modifier==gesture.Modifier && unchecked(now-gesture.Started)<=Native.GetDoubleClickTime()) {
+                    clickWindow=gesture.Window; clickPoint=gesture.Start; clickButton=gesture.Button;
+                    clickModifier=gesture.Modifier; clickTime=gesture.Started;
+                }
+                return;
+            }
+            // Commit the final position first. A separate, non-coalesced terminal action
+            // cannot be overtaken by an older cursor sample from this completed drag.
+            Schedule(gesture);
+            if(!settings.Enabled || !modifierHeld || !settings.MaximizeOnTopEdge || !gesture.CanMaximize ||
+                gesture.ClickCancelled || settings.Modifier!=gesture.Modifier) return;
+            IntPtr monitor=Native.MonitorFromPoint(point,2);
+            var info=new Native.MonitorInfo(); info.Size=Marshal.SizeOf(info);
+            int edge=Math.Max(1,(int)Math.Ceiling(2.0*gesture.Dpi/96));
+            if(monitor!=IntPtr.Zero && Native.GetMonitorInfo(monitor,ref info) &&
+                point.X>=info.Monitor.Left && point.X<info.Monitor.Right &&
+                point.Y>=info.Monitor.Top && point.Y<=info.Monitor.Top+edge) {
+                Schedule(new Gesture {Window=gesture.Window,Action=WindowAction.Maximize,MoveMaximize=true,MaximizeOnly=true,SnapMonitor=monitor});
+            }
         }
         internal bool Eligible(IntPtr window,WindowAction action,out Native.Rect rect) {
             rect=new Native.Rect();
@@ -185,6 +263,20 @@ namespace Reswin {
         }
         internal void Apply(Gesture g) { Apply(g,g.Latest); }
         void Apply(Gesture g,Native.Point point) {
+            if(g.MoveMaximize) {
+                if(g.Initialized) return;
+                g.Initialized=true;
+                Native.Rect rect;
+                if(!settings.Enabled || !(g.MaximizeOnly?settings.MaximizeOnTopEdge:settings.MaximizeOnDoubleClick) ||
+                    !Eligible(g.Window,WindowAction.Maximize,out rect)) return;
+                if(g.MaximizeOnly) {
+                    if(Native.IsZoomed(g.Window) || !PrepareSnap(g.Window,g.SnapMonitor,rect)) return;
+                    Native.ShowWindow(g.Window,3);
+                } else Native.ShowWindow(g.Window,Native.IsZoomed(g.Window)?9:3);
+                // Unlike an asynchronous state change, completion here is ordered with
+                // all preceding moves and later gestures for this target window.
+                return;
+            }
             if(g.Action==WindowAction.Minimize || g.Action==WindowAction.Maximize) {
                 if(!g.Initialized) {
                     g.Initialized=true;
@@ -232,7 +324,32 @@ namespace Reswin {
             // coalescing by filling the receiving thread's queue with obsolete resizes.
             Native.SetWindowPos(g.Window,IntPtr.Zero,target.Left,target.Top,target.Width,target.Height,flags);
         }
-        internal void Cancel() { scroll.Stop(); if(current!=null) { Schedule(current); current=null; } }
+        bool PrepareSnap(IntPtr window,IntPtr monitor,Native.Rect rect) {
+            var info=new Native.MonitorInfo(); info.Size=Marshal.SizeOf(info);
+            if(monitor==IntPtr.Zero || !Native.GetMonitorInfo(monitor,ref info) || info.Work.Width<=0 || info.Work.Height<=0) return false;
+            // Dragging from low in the content can leave the normal rectangle almost
+            // entirely above the display. Save a visible restore location before
+            // maximizing, with the same normal size and the taskbar left accessible.
+            int x=rect.Width<=info.Work.Width?Geometry.Clamp(rect.Left,info.Work.Left,info.Work.Right-rect.Width):info.Work.Left+(info.Work.Width-rect.Width)/2;
+            int y=rect.Height<=info.Work.Height?Geometry.Clamp(rect.Top,info.Work.Top,info.Work.Bottom-rect.Height):info.Work.Top;
+            if((rect.Left!=x || rect.Top!=y) && !Native.SetWindowPos(window,IntPtr.Zero,x,y,0,0,0x4|0x10|0x1)) return false;
+            if(Native.MonitorFromWindow(window,2)==monitor) return true;
+            // Windows chooses the maximize display from the window, not the pointer.
+            // Centering first resolves drags between monitors without changing size.
+            x=info.Work.Left+(info.Work.Width-rect.Width)/2;
+            y=rect.Height<=info.Work.Height?info.Work.Top+(info.Work.Height-rect.Height)/2:info.Work.Top;
+            if(!Native.SetWindowPos(window,IntPtr.Zero,x,y,0,0,0x4|0x10|0x1)) return false;
+            // A target that refuses movement (or an oversized spanning window) must
+            // not unexpectedly maximize on another display.
+            return Native.MonitorFromWindow(window,2)==monitor;
+        }
+        internal void Cancel() {
+            scroll.Stop(); ClearClick();
+            if(current!=null) {
+                var completed=current; current=null;
+                if(completed.Action!=WindowAction.Move || completed.Dragged) Schedule(completed);
+            }
+        }
         void Report(string text) { if(Status!=null) dispatcher.BeginInvoke(new Action(delegate { if(Status!=null) Status(text); })); }
         public void Dispose() {
             disposed=true; current=null; scroll.Dispose();

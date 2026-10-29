@@ -30,6 +30,10 @@ namespace Reswin {
         [DllImport("user32.dll")] internal static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll",EntryPoint="SendMessageTimeoutW",SetLastError=true)] internal static extern IntPtr SendMessageTimeoutValue(IntPtr window,uint msg,IntPtr w,IntPtr l,uint flags,uint timeout,out IntPtr result);
         [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
+        [DllImport("user32.dll")] internal static extern uint GetDoubleClickTime();
+        [DllImport("user32.dll")] internal static extern int GetSystemMetrics(int index);
+        [DllImport("user32.dll")] static extern int GetSystemMetricsForDpi(int index,uint dpi);
+        [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr window);
         [DllImport("user32.dll")] internal static extern IntPtr WindowFromPoint(Point point);
         [DllImport("user32.dll")] internal static extern IntPtr GetAncestor(IntPtr window,uint flags);
         [DllImport("user32.dll")] internal static extern bool GetWindowRect(IntPtr window,out Rect rect);
@@ -81,6 +85,15 @@ namespace Reswin {
         }
         internal static MonitorInfo Monitor(IntPtr window) {
             var info=new MonitorInfo(); info.Size=Marshal.SizeOf(info); GetMonitorInfo(MonitorFromWindow(window,2),ref info); return info;
+        }
+        internal static uint WindowDpi(IntPtr window) {
+            try { uint dpi=GetDpiForWindow(window); return dpi==0?96:dpi; }
+            catch(EntryPointNotFoundException) { return 96; }
+        }
+        internal static int PointerMetric(int index,uint dpi) {
+            try { int value=GetSystemMetricsForDpi(index,dpi); if(value!=0) return Math.Max(1,Math.Abs(value)); }
+            catch(EntryPointNotFoundException) { }
+            return Math.Max(1,Math.Abs(GetSystemMetrics(index)));
         }
         internal static void MaskAltMenu() {
             // An otherwise unused key prevents a consumed Alt+mouse gesture from

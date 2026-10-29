@@ -18,13 +18,15 @@ namespace Reswin {
         public int Modifier {get;set;}
         public ScrollBinding ScrollKey {get;set;}
         public double ScrollSensitivity {get;set;}
+        public bool MaximizeOnTopEdge {get;set;}
+        public bool MaximizeOnDoubleClick {get;set;}
         public WindowAction Left {get;set;}
         public WindowAction Right {get;set;}
         public WindowAction Middle {get;set;}
         public WindowAction Back {get;set;}
         public WindowAction Forward {get;set;}
         public List<Exclusion> Exclusions {get;set;}
-        public Settings() { Enabled=true; Modifier=0xA2; ScrollKey=ScrollBinding.OtherModifier; ScrollSensitivity=1.0; Left=WindowAction.Move; Right=WindowAction.Resize; Middle=WindowAction.Center; Back=WindowAction.Minimize; Forward=WindowAction.Maximize; Exclusions=new List<Exclusion>(); }
+        public Settings() { Enabled=true; Modifier=0xA2; ScrollKey=ScrollBinding.OtherModifier; ScrollSensitivity=1.0; MaximizeOnTopEdge=true; MaximizeOnDoubleClick=true; Left=WindowAction.Move; Right=WindowAction.Resize; Middle=WindowAction.Center; Back=WindowAction.Minimize; Forward=WindowAction.Maximize; Exclusions=new List<Exclusion>(); }
         internal static double NormalizeScrollSensitivity(double value) {
             if(double.IsNaN(value) || double.IsInfinity(value)) return 1.0;
             return Math.Max(MinScrollSensitivity,Math.Min(MaxScrollSensitivity,value));

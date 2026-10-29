@@ -1,5 +1,46 @@
 # Изменения Reswin / Reswin changelog
 
+## 1.1.3
+
+# Русский
+
+## Что нового
+
+- **Разворачивание у верхнего края.** Удерживайте выбранную клавишу Ctrl/Alt и кнопку мыши, назначенную на «Перемещение», перетащите курсор к верхнему краю экрана и отпустите кнопку мыши. Окно развернётся на этом мониторе. Жест работает при захвате за любую часть окна.
+- **Двойное нажатие для разворачивания.** Удерживайте выбранную клавишу Ctrl/Alt и дважды нажмите кнопку мыши, назначенную на «Перемещение». Повторный двойной щелчок возвращает прежний размер и положение.
+- В верхнем блоке настроек добавлены два отдельных переключателя для новых жестов. Оба включены по умолчанию; каждый можно отключить независимо.
+- Увеличена высота окна настроек и выделено больше места чёрному списку. На невысоких экранах используется более компактное расположение; прокрутка остаётся внутри списка приложений.
+- Простое нажатие без перетаскивания больше не восстанавливает развёрнутое окно. Перемещение начинается после небольшого движения мыши.
+
+Новые жесты работают с окнами, которые поддерживают разворачивание. Программы из чёрного списка по-прежнему не обрабатываются.
+
+## Как обновиться
+
+Выйдите из работающего Reswin через меню в трее, распакуйте `Reswin-portable.zip` в постоянную папку и запустите новый `Reswin.exe`. Настройки и чёрный список сохраняются. Встроенный шрифт Manrope не требует отдельной установки.
+
+Требования: Windows 10/11 x64 и .NET Framework 4.8. Сборка выполнена; ручная проверка новых жестов остаётся за пользователем.
+
+---
+
+# English
+
+## What's new
+
+- **Maximize at the top edge.** Hold your selected Ctrl/Alt key and the mouse button assigned to Move, drag the pointer to the top edge of the screen, then release the mouse button. The window maximizes on that monitor. You can grab any part of the window.
+- **Double-click to maximize.** Hold your selected Ctrl/Alt key and double-click the mouse button assigned to Move. Double-click again to restore the previous size and position.
+- Added two separate switches for the new gestures in the top settings group. Both are enabled by default and can be turned off independently.
+- Increased the settings window height and gave the exclusions list more room. Shorter screens use a more compact layout; scrolling stays inside the application list.
+- A click without dragging no longer restores a maximized window. Moving starts after a small pointer movement.
+
+The new gestures apply to windows that support maximizing. Applications in Exclusions are still ignored.
+
+## How to update
+
+Exit the running instance of Reswin using the system tray menu, extract `Reswin-portable.zip` to a permanent folder, and launch the new `Reswin.exe`. Your settings and exclusions are preserved. The bundled Manrope font requires no separate installation.
+
+Requirements: Windows 10/11 x64 and .NET Framework 4.8. The build has completed; manual validation of the new gestures is left to the user.
+
+
 ## 1.1.2
 
 # Русский
