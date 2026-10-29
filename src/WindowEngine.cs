@@ -19,6 +19,7 @@ namespace Reswin {
         IntPtr clickWindow;
         Native.Point clickPoint;
         int clickButton=-1,clickModifier;
+        int inputRevision;
         uint clickTime;
         volatile bool disposed;
         readonly object workLock=new object();
@@ -39,6 +40,8 @@ namespace Reswin {
             internal int DragX,DragY,DoubleX,DoubleY,Modifier;
             internal uint Started,Dpi;
             internal IntPtr SnapMonitor;
+            internal IntPtr SnapForeground;
+            internal int SnapDirection,InputRevision;
             internal WindowRequest QueuedRequest;
         }
         internal WindowEngine(Settings settings,Dispatcher dispatcher) {
@@ -67,8 +70,9 @@ namespace Reswin {
                 try {
                     var data=Marshal.PtrToStructure<Native.KeyData>(pointer);
                     if((data.Flags&0x10)==0) {
+                        if(message.ToInt32()==0x100 || message.ToInt32()==0x104) Interlocked.Increment(ref inputRevision);
                         if(scroll.HandleKey(message.ToInt32(),(int)data.Key,current==null,data.Scan,data.Flags)) return new IntPtr(1);
-                        if((message.ToInt32()==0x101 || message.ToInt32()==0x105) && data.Key==settings.Modifier) Cancel();
+                        if((message.ToInt32()==0x101 || message.ToInt32()==0x105) && data.Key==settings.Modifier) Cancel(false);
                     }
                 } catch { Cancel(); }
             }
@@ -97,7 +101,7 @@ namespace Reswin {
                 button=side==1?3:side==2?4:-1;
             }
             if(button<0) {
-                if(message==0x20A || message==0x20E) { ClearClick(); if(current!=null) current.ClickCancelled=true; }
+                if(message==0x20A || message==0x20E) { Interlocked.Increment(ref inputRevision); ClearClick(); if(current!=null) current.ClickCancelled=true; }
                 return false;
             }
             scroll.Stop();
@@ -111,6 +115,7 @@ namespace Reswin {
                 }
                 return true;
             }
+            Interlocked.Increment(ref inputRevision);
             if(suppressed[button]) return true;
             if(current!=null) { ClearClick(); current.ClickCancelled=true; suppressed[button]=true; return true; }
             if(!settings.Enabled || !modifierHeld) { ClearClick(); return false; }
@@ -183,8 +188,14 @@ namespace Reswin {
             int edge=Math.Max(1,(int)Math.Ceiling(2.0*gesture.Dpi/96));
             if(monitor!=IntPtr.Zero && Native.GetMonitorInfo(monitor,ref info) &&
                 point.X>=info.Monitor.Left && point.X<info.Monitor.Right &&
-                point.Y>=info.Monitor.Top && point.Y<=info.Monitor.Top+edge) {
-                Schedule(new Gesture {Window=gesture.Window,Action=WindowAction.Maximize,MoveMaximize=true,MaximizeOnly=true,SnapMonitor=monitor});
+                point.Y>=info.Monitor.Top && point.Y<info.Monitor.Bottom) {
+                // Top wins at corners; this setting exposes the three requested
+                // native arrangements rather than introducing quarter layouts.
+                int direction=point.Y<=info.Monitor.Top+edge?1:
+                    point.X<=info.Monitor.Left+edge?2:point.X>=info.Monitor.Right-1-edge?3:0;
+                if(direction!=0) Schedule(new Gesture {Window=gesture.Window,Action=WindowAction.Maximize,
+                    MoveMaximize=true,MaximizeOnly=true,SnapMonitor=monitor,SnapDirection=direction,
+                    Modifier=gesture.Modifier,InputRevision=Volatile.Read(ref inputRevision),SnapForeground=Native.GetForegroundWindow()});
             }
         }
         internal bool Eligible(IntPtr window,WindowAction action,out Native.Rect rect) {
@@ -270,8 +281,11 @@ namespace Reswin {
                 if(!settings.Enabled || !(g.MaximizeOnly?settings.MaximizeOnTopEdge:settings.MaximizeOnDoubleClick) ||
                     !Eligible(g.Window,WindowAction.Maximize,out rect)) return;
                 if(g.MaximizeOnly) {
+                    if(g.InputRevision!=Volatile.Read(ref inputRevision)) return;
                     if(Native.IsZoomed(g.Window) || !PrepareSnap(g.Window,g.SnapMonitor,rect)) return;
-                    Native.ShowWindow(g.Window,3);
+                    if(g.InputRevision!=Volatile.Read(ref inputRevision)) return;
+                    if(g.SnapDirection<=1) Native.ShowWindow(g.Window,3);
+                    else SnapSide(g);
                 } else Native.ShowWindow(g.Window,Native.IsZoomed(g.Window)?9:3);
                 // Unlike an asynchronous state change, completion here is ordered with
                 // all preceding moves and later gestures for this target window.
@@ -288,7 +302,7 @@ namespace Reswin {
             }
             if(!g.Initialized) {
                 g.Initialized=true;
-                if(g.Action==WindowAction.Move && Native.IsZoomed(g.Window)) {
+                if(g.Action==WindowAction.Move && (Native.IsZoomed(g.Window) || Native.IsArranged(g.Window))) {
                     var placement=new Native.Placement(); placement.Length=Marshal.SizeOf(placement);
                     if(!Native.GetWindowPlacement(g.Window,ref placement)) return;
                     int width=placement.Normal.Width,height=placement.Normal.Height;
@@ -343,7 +357,42 @@ namespace Reswin {
             // not unexpectedly maximize on another display.
             return Native.MonitorFromWindow(window,2)==monitor;
         }
-        internal void Cancel() {
+        void SnapSide(Gesture gesture) {
+            if(disposed || dispatcher.HasShutdownStarted || Native.IsArranged(gesture.Window)) return;
+            // Prepare/move stays on the worker. The final input transaction runs
+            // on the hook dispatcher, so no physical hook event can interleave
+            // state validation and generation of the ordered shortcut batch.
+            if(gesture.InputRevision!=Volatile.Read(ref inputRevision) ||
+                Native.GetForegroundWindow()!=gesture.SnapForeground || !Native.CanSendSnapKeys(gesture.Modifier)) return;
+            if(Native.GetForegroundWindow()!=gesture.Window) {
+                if(!Native.SetForegroundWindow(gesture.Window)) return;
+                // A successful cross-thread activation is asynchronous. Wait
+                // briefly for its message to be handled before testing focus,
+                // without attaching input queues or blocking our hook thread.
+                IntPtr result;
+                if(Native.SendMessageTimeoutValue(gesture.Window,0,IntPtr.Zero,IntPtr.Zero,2,100,out result)==IntPtr.Zero) return;
+                if(Native.GetForegroundWindow()!=gesture.Window) return;
+            }
+            bool sent=false;
+            dispatcher.Invoke(new Action(delegate {
+                Native.Rect currentRect;
+                if(disposed || current!=null || !settings.Enabled || !settings.MaximizeOnTopEdge ||
+                    settings.Modifier!=gesture.Modifier || gesture.InputRevision!=Volatile.Read(ref inputRevision) ||
+                    !Eligible(gesture.Window,WindowAction.Maximize,out currentRect) ||
+                    Native.MonitorFromWindow(gesture.Window,2)!=gesture.SnapMonitor || Native.IsArranged(gesture.Window) ||
+                    Native.GetForegroundWindow()!=gesture.Window) return;
+                sent=Native.SnapToSide(gesture.Window,gesture.SnapDirection==3,gesture.Modifier);
+            }),DispatcherPriority.Input);
+            if(!sent) return;
+            // Shell arrangement is asynchronous to SendInput. Let it commit
+            // before this window's worker accepts a subsequent Move request.
+            for(int attempt=0;attempt<25 && !disposed;attempt++) {
+                if(Native.IsArranged(gesture.Window) || Native.IsIconic(gesture.Window)) break;
+                Thread.Sleep(8);
+            }
+        }
+        internal void Cancel(bool cancelPendingSnap=true) {
+            if(cancelPendingSnap) Interlocked.Increment(ref inputRevision);
             scroll.Stop(); ClearClick();
             if(current!=null) {
                 var completed=current; current=null;

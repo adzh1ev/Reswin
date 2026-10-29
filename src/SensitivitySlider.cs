@@ -42,10 +42,9 @@ namespace Reswin {
             // Direct animation needs a mutable transform owned by this instance.
             if(scale.IsFrozen) { scale=scale.Clone(); thumbCore.RenderTransform=scale; }
             double target=!IsEnabled?1:dragging?1.38:IsMouseOver || IsKeyboardFocused?1.1:1;
-            var duration=TimeSpan.FromMilliseconds(dragging?160:190);
-            var easing=new CubicEase {EasingMode=EasingMode.EaseOut};
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty,new DoubleAnimation(scale.ScaleX,target,duration) {EasingFunction=easing});
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty,new DoubleAnimation(scale.ScaleY,target,duration) {EasingFunction=easing});
+            int duration=dragging?150:180;
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty,Interaction.Transition(scale.ScaleX,target,duration));
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty,Interaction.Transition(scale.ScaleY,target,duration));
         }
         void SetFromPointer(MouseEventArgs e) {
             if(track==null || track.ActualWidth<=0) return;

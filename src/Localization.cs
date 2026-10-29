@@ -1,10 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 namespace Reswin {
     public enum AppLanguage { Russian, English }
     internal static class L {
         internal static AppLanguage Language=AppLanguage.Russian;
         static readonly Dictionary<string,string> English=new Dictionary<string,string> {
+            {"Управление","Controls"},
+            {"Настройки","Settings"},
             {"Действие Reswin не назначено. Кнопка мыши работает как обычно.","No Reswin action is assigned. The mouse button works normally."},
             {"Удерживайте {0} и эту кнопку мыши, затем двигайте мышь, чтобы переместить окно под указателем.","Hold {0} and this mouse button, then move the mouse to move the window under the pointer."},
             {"Удерживайте {0} и эту кнопку мыши, затем двигайте мышь, чтобы изменить размер окна под указателем.","Hold {0} and this mouse button, then move the mouse to resize the window under the pointer."},
@@ -12,13 +14,13 @@ namespace Reswin {
             {"Удерживайте {0} и нажмите эту кнопку мыши, чтобы свернуть окно под указателем.","Hold {0} and press this mouse button to minimize the window under the pointer."},
             {"Удерживайте {0} и нажмите эту кнопку мыши, чтобы развернуть окно под указателем. Повторное нажатие вернёт прежний размер и положение.","Hold {0} and press this mouse button to maximize the window under the pointer. Press again to restore its previous size and position."},
             {"— Без настройки —","— Unassigned —"},
-            {"Развернуть у верхнего края","Maximize at top edge"},
+            {"Привязка к краям экрана","Snap to screen edges"},
             {"Развернуть двойным нажатием","Double-click to maximize"},
             {"Верхний край","Top edge"},
             {"Двойное нажатие","Double click"},
             {"Для перемещения: {0}.","Move button: {0}."},
             {"Сначала назначьте действие «Перемещение» кнопке мыши.","First assign Move to a mouse button."},
-            {"Удерживайте {0} и кнопку мыши с действием «Перемещение». Перетащите окно за любую его часть к верхнему краю экрана и отпустите кнопку мыши, чтобы развернуть окно.","Hold {0} and the mouse button assigned to Move. Drag the window from anywhere inside it to the top edge of the screen, then release the mouse button to maximize it."},
+            {"Удерживайте {0} и кнопку мыши с действием «Перемещение». Доведите курсор до верхнего, левого или правого края экрана и отпустите кнопку мыши. Верхний край разворачивает окно; боковые края размещают его на соответствующей половине экрана.","Hold {0} and the mouse button assigned to Move. Drag the pointer to the top, left or right edge of the screen, then release the mouse button. The top edge maximizes the window; the side edges place it on the corresponding half of the screen."},
             {"Удерживайте {0} и дважды нажмите кнопку мыши с действием «Перемещение» в любой части окна. Окно развернётся; повторное двойное нажатие вернёт прежний размер и положение.","Hold {0} and double-click the mouse button assigned to Move anywhere inside a window. The window maximizes; double-click again to restore its previous size and position."},
             {"Прокрутка","Scrolling"},
             {"Чувствительность","Sensitivity"},

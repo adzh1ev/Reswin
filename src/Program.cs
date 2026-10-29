@@ -36,7 +36,7 @@ namespace Reswin {
             using(var engine=new WindowEngine(settings,app.Dispatcher))
             using(var tray=new Forms.NotifyIcon())
             using(var icon=MakeIcon()) {
-                MainWindow window=null;
+                MainWindow window=null; int selectedTab=0;
                 Action reveal=null; bool themeInstalled=false; bool rebuilding=false;
                 var menu=new TrayMenu();
                 var open=new Forms.ToolStripMenuItem(L.T("Открыть настройки"));
@@ -49,7 +49,7 @@ namespace Reswin {
                     if(languageChanged && window!=null && !rebuilding) {
                         rebuilding=true;
                         app.Dispatcher.BeginInvoke(new Action(delegate {
-                            double left=window.Left,top=window.Top; var old=window;
+                            double left=window.Left,top=window.Top; selectedTab=window.SelectedTab; var old=window;
                             old.AllowClose=true; old.Close(); window=null;
                             reveal(); window.Left=left; window.Top=top; rebuilding=false;
                         }));
@@ -62,7 +62,7 @@ namespace Reswin {
                 reveal=delegate {
                     if(window==null) {
                         if(!themeInstalled) { Theme.Install(app); themeInstalled=true; }
-                        window=new MainWindow(settings,save);
+                        window=new MainWindow(settings,save,false,selectedTab);
                         window.Icon=System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon.Handle,Int32Rect.Empty,BitmapSizeOptions.FromEmptyOptions());
                         app.MainWindow=window;
                         if(lastStatus!=null) window.SetStatus(lastStatus);

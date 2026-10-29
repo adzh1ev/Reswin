@@ -1,5 +1,31 @@
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+# These templates are parsed at runtime, so csc cannot catch malformed XML.
+# Validate every standalone XAML literal before producing an executable.
+$xamlSettings = New-Object System.Xml.XmlReaderSettings
+$xamlSettings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
+$xamlSettings.XmlResolver = $null
+foreach ($sourceFile in (Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.cs')) {
+    $sourceText = [System.IO.File]::ReadAllText($sourceFile.FullName)
+    foreach ($literal in [regex]::Matches($sourceText, '@"((?:[^"]|"")*)"')) {
+        $markup = $literal.Groups[1].Value.Replace('""', '"')
+        if (!$markup.TrimStart().StartsWith('<')) { continue }
+        $xmlText = New-Object System.IO.StringReader($markup)
+        $xmlReader = $null
+        try {
+            $xmlReader = [System.Xml.XmlReader]::Create($xmlText, $xamlSettings)
+            while ($xmlReader.Read()) { }
+            if ($markup -match '\{x:' -and $markup -notmatch 'xmlns:x\s*=') {
+                throw 'The XAML x: namespace is not declared.'
+            }
+        } catch {
+            throw ('Invalid XAML in ' + $sourceFile.Name + ': ' + $_.Exception.Message)
+        } finally {
+            if ($null -ne $xmlReader) { $xmlReader.Dispose() }
+            $xmlText.Dispose()
+        }
+    }
+}
 $framework = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
 $csc = Join-Path $framework 'csc.exe'
 $wpf = Join-Path $framework 'WPF'

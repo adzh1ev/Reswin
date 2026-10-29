@@ -4,41 +4,41 @@
 
 # Русский
 
-## Что нового
+## Что нового в Reswin 1.1.3
 
-- **Разворачивание у верхнего края.** Удерживайте выбранную клавишу Ctrl/Alt и кнопку мыши, назначенную на «Перемещение», перетащите курсор к верхнему краю экрана и отпустите кнопку мыши. Окно развернётся на этом мониторе. Жест работает при захвате за любую часть окна.
-- **Двойное нажатие для разворачивания.** Удерживайте выбранную клавишу Ctrl/Alt и дважды нажмите кнопку мыши, назначенную на «Перемещение». Повторный двойной щелчок возвращает прежний размер и положение.
-- В верхнем блоке настроек добавлены два отдельных переключателя для новых жестов. Оба включены по умолчанию; каждый можно отключить независимо.
-- Увеличена высота окна настроек и выделено больше места чёрному списку. На невысоких экранах используется более компактное расположение; прокрутка остаётся внутри списка приложений.
-- Простое нажатие без перетаскивания больше не восстанавливает развёрнутое окно. Перемещение начинается после небольшого движения мыши.
-
-Новые жесты работают с окнами, которые поддерживают разворачивание. Программы из чёрного списка по-прежнему не обрабатываются.
+- **Новый интерфейс с тремя вкладками:** «Управление», «Чёрный список» и «Настройки». Коралловый акцент `#D03E36`, встроенный Manrope и ровные иконки Lucide в светлой и тёмной темах.
+- **Плавная навигация.** Нажимайте вкладки или удерживайте левую кнопку мыши и перетаскивайте выделение между ними. Страницы переключаются с направленным слайдом; выделение, переключатели и бегунок чувствительности анимированы.
+- **Компактное окно.** Высота подстраивается под содержимое без лишнего места снизу. Чёрный список размещён на отдельной вкладке и прокручивается внутри своей области.
+- **Привязка к трём краям экрана.** Удерживайте выбранную клавишу Ctrl/Alt и кнопку мыши с действием «Перемещение». Доведите курсор до края и отпустите мышь: сверху окно развернётся, слева или справа — займёт соответствующую половину экрана. Для боковой привязки используется системная функция Snap Windows.
+- **Двойное нажатие для разворачивания.** Удерживайте выбранную клавишу и дважды нажмите кнопку мыши с действием «Перемещение». Повторное двойное нажатие восстанавливает окно. Привязка к краям и двойное нажатие отключаются независимо.
+- Сохранены автоматический выбор клавиши прокрутки, настройка чувствительности 25–200%, русский и английский языки, автозапуск и исключения приложений.
+- Исправлена ошибка запуска интерфейса с сообщением `x is an undeclared prefix`. Проверка разметки добавлена в процесс сборки.
 
 ## Как обновиться
 
-Выйдите из работающего Reswin через меню в трее, распакуйте `Reswin-portable.zip` в постоянную папку и запустите новый `Reswin.exe`. Настройки и чёрный список сохраняются. Встроенный шрифт Manrope не требует отдельной установки.
+Эта сборка заменяет ранее опубликованную 1.1.3. Выйдите из работающего Reswin через трей, распакуйте новый `Reswin-portable.zip` в постоянную папку и запустите `Reswin.exe`. Настройки и чёрный список сохраняются. Отдельная установка шрифта не требуется.
 
-Требования: Windows 10/11 x64 и .NET Framework 4.8. Сборка выполнена; ручная проверка новых жестов остаётся за пользователем.
+Системная привязка зависит от настроек Snap Windows и поддержки окна приложением. Требования: Windows 10/11 x64 и .NET Framework 4.8. Лицензии шрифта и иконок включены в `ThirdPartyNotices.txt`.
 
 ---
 
 # English
 
-## What's new
+## What's new in Reswin 1.1.3
 
-- **Maximize at the top edge.** Hold your selected Ctrl/Alt key and the mouse button assigned to Move, drag the pointer to the top edge of the screen, then release the mouse button. The window maximizes on that monitor. You can grab any part of the window.
-- **Double-click to maximize.** Hold your selected Ctrl/Alt key and double-click the mouse button assigned to Move. Double-click again to restore the previous size and position.
-- Added two separate switches for the new gestures in the top settings group. Both are enabled by default and can be turned off independently.
-- Increased the settings window height and gave the exclusions list more room. Shorter screens use a more compact layout; scrolling stays inside the application list.
-- A click without dragging no longer restores a maximized window. Moving starts after a small pointer movement.
-
-The new gestures apply to windows that support maximizing. Applications in Exclusions are still ignored.
+- **A new interface with three tabs:** Controls, Exclusions and Settings. Coral accent `#D03E36`, bundled Manrope and consistent Lucide icons in both light and dark themes.
+- **Smooth navigation.** Click a tab or hold the left mouse button and drag the selection across the tab strip. Pages switch with a directional slide; selection, switches and the sensitivity thumb animate smoothly.
+- **A compact window.** Height fits the content without extra space below it. Exclusions now has a dedicated tab with scrolling inside its own list area.
+- **Snap to three screen edges.** Hold your selected Ctrl/Alt key and the mouse button assigned to Move. Drag the pointer to an edge and release the mouse button: the top maximizes the window; the left or right edge snaps it to that half of the screen. Side snapping uses the native Windows Snap feature.
+- **Double-click to maximize.** Hold the selected modifier and double-click the mouse button assigned to Move. Double-click again to restore the window. Edge snapping and double-click behavior can be disabled independently.
+- Preserved automatic scroll-key selection, 25–200% sensitivity adjustment, Russian and English, startup and application exclusions.
+- Fixed the interface startup error reporting `x is an undeclared prefix`. Markup validation is now part of the build process.
 
 ## How to update
 
-Exit the running instance of Reswin using the system tray menu, extract `Reswin-portable.zip` to a permanent folder, and launch the new `Reswin.exe`. Your settings and exclusions are preserved. The bundled Manrope font requires no separate installation.
+This build replaces the previously published 1.1.3. Exit the running instance of Reswin using the system tray, extract the new `Reswin-portable.zip` to a permanent folder, and launch `Reswin.exe`. Your settings and exclusions are preserved. No separate font installation is needed.
 
-Requirements: Windows 10/11 x64 and .NET Framework 4.8. The build has completed; manual validation of the new gestures is left to the user.
+Native snapping depends on Windows Snap settings and the application's window support. Requirements: Windows 10/11 x64 and .NET Framework 4.8. Font and icon licenses are included in `ThirdPartyNotices.txt`.
 
 
 ## 1.1.2

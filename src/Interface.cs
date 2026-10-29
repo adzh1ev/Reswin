@@ -29,7 +29,8 @@ namespace Reswin {
         internal ProgramPicker(Settings settings) {
             this.settings=settings;
             SetResourceReference(StyleProperty,typeof(Window));
-            Title=L.T("Добавить исключение"); Width=460; Height=500; MinWidth=360; MinHeight=360; WindowStartupLocation=WindowStartupLocation.CenterOwner;
+            Title=L.T("Добавить исключение"); Width=500; Height=500; MinWidth=360; MinHeight=360; WindowStartupLocation=WindowStartupLocation.CenterOwner;
+            refresh.Style=(Style)Application.Current.FindResource("PrimaryButton");
             var root=new DockPanel { Margin=new Thickness(24) }; Content=root;
             var top=new StackPanel(); DockPanel.SetDock(top,Dock.Top); root.Children.Add(top);
             var title=Theme.Text(L.T("Добавить исключение"),23,false); title.FontWeight=FontWeights.SemiBold; title.Margin=new Thickness(0,0,0,7); top.Children.Add(title);

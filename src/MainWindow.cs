@@ -18,58 +18,52 @@ namespace Reswin {
         readonly CheckBox maximizeAtTop=new CheckBox();
         readonly CheckBox maximizeDoubleClick=new CheckBox();
         readonly ComboBox[] actionControls=new ComboBox[5];
-        readonly bool compact=SystemParameters.WorkArea.Height<960;
-        readonly bool tight=SystemParameters.WorkArea.Height<760;
-        readonly bool veryTight=SystemParameters.WorkArea.Height<640;
+        readonly bool compact=SystemParameters.WorkArea.Height<640;
+        readonly bool tight=SystemParameters.WorkArea.Height<560;
+        TabbedNavigation navigation;
         FrameworkElement topEdgeOption,doubleClickOption;
         readonly DispatcherTimer sensitivitySaveTimer=new DispatcherTimer {Interval=TimeSpan.FromMilliseconds(220)};
         bool sensitivityDirty;
         bool updatingStartup;
+        bool heightFitted;
         internal bool AllowClose;
-        internal MainWindow(Settings settings,Action changed,bool preview=false) {
+        internal int SelectedTab {
+            get { return navigation==null?0:navigation.SelectedIndex; }
+            set { if(navigation!=null) navigation.SelectedIndex=value; }
+        }
+        internal MainWindow(Settings settings,Action changed,bool preview=false,int initialTab=0) {
             this.settings=settings; this.changed=changed;
             SetResourceReference(StyleProperty,typeof(Window));
-            Title="Reswin 1.1.3"; Width=460; Height=Math.Min(1000,SystemParameters.WorkArea.Height);
-            MinWidth=460; MinHeight=Math.Min(540,SystemParameters.WorkArea.Height);
+            Title="Reswin 1.1.3"; Width=500; Height=Math.Min(compact?512:576,SystemParameters.WorkArea.Height);
+            MinWidth=500; MinHeight=Math.Min(480,SystemParameters.WorkArea.Height);
             WindowStyle=WindowStyle.SingleBorderWindow; ResizeMode=ResizeMode.CanMinimize; WindowStartupLocation=WindowStartupLocation.CenterScreen;
             var body=new Border(); body.SetResourceReference(Border.BackgroundProperty,"BackgroundBrush"); Content=body;
-            var content=new Grid {Margin=tight?new Thickness(16,6,16,8):compact?new Thickness(16,8,16,12):new Thickness(20,16,20,20)}; body.Child=content;
-            for(int i=0;i<2;i++) content.RowDefinitions.Add(new RowDefinition {Height=GridLength.Auto});
-            content.RowDefinitions.Add(new RowDefinition {Height=new GridLength(1,GridUnitType.Star)});
+            var content=new Grid {Margin=new Thickness(16,compact?12:16,16,16)}; body.Child=content;
 
-            var bindings=new StackPanel(); var controls=Card(bindings,new Thickness(12,tight?4:compact?6:10,12,tight?4:compact?6:10)); Grid.SetRow(controls,0); content.Children.Add(controls);
+            var bindings=new StackPanel();
+            var controls=Card(bindings,new Thickness(16,12,16,12)); controls.VerticalAlignment=VerticalAlignment.Top;
             ComboBox scroll=null;
             var modifier=new ComboBox {ItemsSource=new[]{L.T("Левый Ctrl"),L.T("Левый Alt")},SelectedIndex=settings.Modifier==0xA4?1:0};
-            bindings.Children.Add(SettingRow(L.T("Зажать клавишу"),Icons.Lucide("rectangle-ellipsis"),modifier));
+            bindings.Children.Add(SettingRow(L.T("Зажать клавишу"),Icons.Lucide("rectangle-ellipsis",20),modifier));
             Interaction.AnimateDropDown(modifier); Theme.Accessible(modifier,L.T("Клавиша-модификатор"));
             modifier.SelectionChanged+=delegate {settings.Modifier=modifier.SelectedIndex==1?0xA4:0xA2; if(scroll!=null) RefreshScrollChoices(scroll); RefreshActionHints(); changed();};
-            bindings.Children.Add(ActionRow(L.T("Левая кнопка"),"mouse_black 1.svg",0));
-            bindings.Children.Add(ActionRow(L.T("Правая кнопка"),"mouse_black 2.svg",1));
-            bindings.Children.Add(ActionRow(L.T("Средняя кнопка"),"mouse_black 3.svg",2));
-            bindings.Children.Add(ActionRow(L.T("Боковая назад"),"mouse_back.svg",3));
-            bindings.Children.Add(ActionRow(L.T("Боковая вперёд"),"mouse_forward.svg",4));
+            bindings.Children.Add(ActionRow(L.T("Левая кнопка"),"mouse-left",0));
+            bindings.Children.Add(ActionRow(L.T("Правая кнопка"),"mouse-right",1));
+            bindings.Children.Add(ActionRow(L.T("Средняя кнопка"),"mouse",2));
+            bindings.Children.Add(ActionRow(L.T("Боковая назад"),"arrow-left",3));
+            bindings.Children.Add(ActionRow(L.T("Боковая вперёд"),"arrow-right",4));
             bindings.Children.Add(BindingDivider());
             maximizeAtTop.IsChecked=settings.MaximizeOnTopEdge;
             maximizeDoubleClick.IsChecked=settings.MaximizeOnDoubleClick;
-            Theme.Accessible(maximizeAtTop,L.T("Развернуть у верхнего края"));
+            Theme.Accessible(maximizeAtTop,L.T("Привязка к краям экрана"));
             Theme.Accessible(maximizeDoubleClick,L.T("Развернуть двойным нажатием"));
             maximizeAtTop.Checked+=delegate {settings.MaximizeOnTopEdge=true; changed();};
             maximizeAtTop.Unchecked+=delegate {settings.MaximizeOnTopEdge=false; changed();};
             maximizeDoubleClick.Checked+=delegate {settings.MaximizeOnDoubleClick=true; changed();};
             maximizeDoubleClick.Unchecked+=delegate {settings.MaximizeOnDoubleClick=false; changed();};
-            if(veryTight) {
-                // Keep both gestures visible without using the exclusions viewport
-                // for two extra rows on displays with little vertical space.
-                var options=new Grid(); options.ColumnDefinitions.Add(new ColumnDefinition()); options.ColumnDefinitions.Add(new ColumnDefinition());
-                topEdgeOption=CompactGestureOption(L.T("Верхний край"),maximizeAtTop);
-                doubleClickOption=CompactGestureOption(L.T("Двойное нажатие"),maximizeDoubleClick);
-                topEdgeOption.Margin=new Thickness(4,0,6,0); doubleClickOption.Margin=new Thickness(6,0,0,0);
-                options.Children.Add(topEdgeOption); Grid.SetColumn(doubleClickOption,1); options.Children.Add(doubleClickOption); bindings.Children.Add(options);
-            } else {
-                topEdgeOption=TogglePreferenceRow(L.T("Развернуть у верхнего края"),"panels-top-left",maximizeAtTop);
-                doubleClickOption=TogglePreferenceRow(L.T("Развернуть двойным нажатием"),"mouse-pointer-click",maximizeDoubleClick);
-                bindings.Children.Add(topEdgeOption); bindings.Children.Add(doubleClickOption);
-            }
+            topEdgeOption=TogglePreferenceRow(L.T("Привязка к краям экрана"),"arrow-up-to-line",maximizeAtTop);
+            doubleClickOption=TogglePreferenceRow(L.T("Развернуть двойным нажатием"),"mouse-pointer-click",maximizeDoubleClick);
+            bindings.Children.Add(topEdgeOption); bindings.Children.Add(doubleClickOption);
             RefreshGestureHints();
             bindings.Children.Add(BindingDivider());
             scroll=new ComboBox {ItemsSource=new[]{L.T("— Без настройки —"),ScrollKeyLabel()},SelectedIndex=settings.ScrollKey==ScrollBinding.None?0:1,ToolTip=ScrollHint()};
@@ -77,10 +71,11 @@ namespace Reswin {
             sensitivitySaveTimer.Tick+=delegate { SaveSensitivity(); };
             var sensitivityRow=SensitivityRow(); sensitivityRow.IsEnabled=settings.ScrollKey!=ScrollBinding.None;
             scroll.SelectionChanged+=delegate {if(scroll.SelectedIndex<0) return; settings.ScrollKey=scroll.SelectedIndex==0?ScrollBinding.None:ScrollBinding.OtherModifier; sensitivityRow.IsEnabled=settings.ScrollKey!=ScrollBinding.None; changed();};
-            bindings.Children.Add(SettingRow(L.T("Прокрутка"),Icons.Lucide("mouse"),scroll));
+            bindings.Children.Add(SettingRow(L.T("Прокрутка"),Icons.Lucide("mouse",20),scroll));
             bindings.Children.Add(sensitivityRow);
 
-            var preferences=new StackPanel(); var preferenceCard=Card(preferences,new Thickness(14,tight?2:compact?4:8,14,tight?4:compact?8:12)); preferenceCard.Margin=new Thickness(0,compact?6:12,0,compact?6:12); Grid.SetRow(preferenceCard,1); content.Children.Add(preferenceCard);
+            var preferences=new StackPanel();
+            var preferenceCard=Card(preferences,new Thickness(16,12,16,16)); preferenceCard.VerticalAlignment=VerticalAlignment.Top;
             enabled.IsChecked=settings.Enabled;
             Theme.Accessible(enabled,L.T("Включить приложение"));
             enabled.ToolTip=L.T("При выключении управление окнами и прокрутка приостанавливаются.");
@@ -98,23 +93,42 @@ namespace Reswin {
             var language=new ComboBox {ItemsSource=new[]{"Русский","English"},SelectedIndex=(int)settings.Language};
             Interaction.AnimateDropDown(language); Theme.Accessible(language,L.T("Язык интерфейса"));
             language.SelectionChanged+=delegate {settings.Language=(AppLanguage)language.SelectedIndex; changed();};
-            var appearanceRow=new Grid {Margin=new Thickness(0,tight?4:6,0,0)};
+            var appearanceRow=new Grid {Margin=new Thickness(0,12,0,0)};
             appearanceRow.ColumnDefinitions.Add(new ColumnDefinition()); appearanceRow.ColumnDefinitions.Add(new ColumnDefinition());
             var themeField=PreferenceField(L.T("Тема"),appearance); themeField.Margin=new Thickness(0,0,6,0); appearanceRow.Children.Add(themeField);
             var languageField=PreferenceField(L.T("Язык"),language); languageField.Margin=new Thickness(6,0,0,0); Grid.SetColumn(languageField,1); appearanceRow.Children.Add(languageField); preferences.Children.Add(appearanceRow);
 
-            var blacklist=new DockPanel(); var blacklistCard=Card(blacklist,new Thickness(14,tight?8:10,14,tight?8:12)); Grid.SetRow(blacklistCard,2); content.Children.Add(blacklistCard);
-            var blacklistHeader=new DockPanel {Height=32,Margin=new Thickness(0,0,0,tight?4:8)};
+            var blacklist=new DockPanel();
+            var blacklistCard=Card(blacklist,new Thickness(16,12,16,16));
+            var blacklistHeader=new DockPanel {Height=36,Margin=new Thickness(0,0,0,12)};
             var add=Interaction.IconButton("plus",20,L.T("Добавить открытую программу"));
             Theme.Accessible(add,L.T("Добавить программу в чёрный список")); DockPanel.SetDock(add,Dock.Right); blacklistHeader.Children.Add(add);
             var label=Theme.Text(L.T("Чёрный список"),15,false); label.FontWeight=FontWeights.SemiBold; label.Margin=new Thickness(4,0,0,0); blacklistHeader.Children.Add(label); DockPanel.SetDock(blacklistHeader,Dock.Top); blacklist.Children.Add(blacklistHeader);
             add.Click+=delegate {var picker=new ProgramPicker(settings) {Owner=this}; if(picker.ShowDialog()==true) {changed(); RenderExclusions();}};
             blacklist.Children.Add(new SmoothScrollViewer {Content=exclusions,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Focusable=false});
+
+            navigation=new TabbedNavigation(
+                new[]{L.T("Управление"),L.T("Чёрный список"),L.T("Настройки")},
+                new[]{"sliders-horizontal","ban","settings"},
+                new FrameworkElement[]{controls,blacklistCard,preferenceCard},initialTab);
+            navigation.SelectionChanged+=delegate {SaveSensitivity();}; content.Children.Add(navigation);
+            Loaded+=delegate {FitHeightToControls(body,content,controls);};
             RenderExclusions(); if(startupWarning!=null) SetStatus(startupWarning);
             Closing+=delegate(object sender,System.ComponentModel.CancelEventArgs e) {if(!AllowClose) {e.Cancel=true; Hide();}};
             IsVisibleChanged+=delegate {if(!IsVisible) SaveSensitivity();};
             Closed+=delegate {SaveSensitivity(); sensitivitySaveTimer.Stop();};
             StateChanged+=delegate {if(WindowState==WindowState.Minimized) {Hide(); WindowState=WindowState.Normal;}};
+        }
+        void FitHeightToControls(Border body,Grid content,Border controls) {
+            if(heightFitted || navigation.ActualWidth<=0 || body.ActualHeight<=0) return;
+            // Measure even when a language change reopens the Settings tab first.
+            // Keep one stable window size; the list uses this same full viewport.
+            controls.Measure(new Size(navigation.ActualWidth,double.PositiveInfinity));
+            double chrome=Math.Max(0,ActualHeight-body.ActualHeight);
+            double height=chrome+content.Margin.Top+content.Margin.Bottom+
+                navigation.RowDefinitions[0].ActualHeight+controls.DesiredSize.Height;
+            heightFitted=true;
+            Height=Math.Min(SystemParameters.WorkArea.Height,Math.Max(MinHeight,Math.Ceiling(height)));
         }
         void RefreshScrollChoices(ComboBox combo) {
             int selected=settings.ScrollKey==ScrollBinding.None?0:1;
@@ -149,8 +163,8 @@ namespace Reswin {
             sensitivityDirty=false; changed();
         }
         FrameworkElement TogglePreferenceRow(string title,string icon,CheckBox control) {
-            var row=new Grid {Height=compact?32:40};
-            row.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(34)});
+            var row=new Grid {Height=compact?36:40};
+            row.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(30)});
             row.ColumnDefinitions.Add(new ColumnDefinition());
             row.ColumnDefinitions.Add(new ColumnDefinition {Width=GridLength.Auto});
             row.Children.Add(Icons.Lucide(icon,20));
@@ -159,14 +173,8 @@ namespace Reswin {
             control.VerticalAlignment=VerticalAlignment.Center; Grid.SetColumn(control,2); row.Children.Add(control);
             return row;
         }
-        FrameworkElement CompactGestureOption(string title,CheckBox control) {
-            var row=new Grid {Height=32}; row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition {Width=GridLength.Auto});
-            var label=Theme.Text(title,12,false); label.TextWrapping=TextWrapping.Wrap; label.Margin=new Thickness(0,0,4,0); row.Children.Add(label);
-            Interaction.AnimateSwitch(control); control.Style=(Style)Application.Current.FindResource("Switch");
-            control.VerticalAlignment=VerticalAlignment.Center; Grid.SetColumn(control,1); row.Children.Add(control); return row;
-        }
         FrameworkElement BindingDivider() {
-            var line=new Border {Height=1,Margin=new Thickness(4,veryTight?2:tight?4:compact?5:8,4,veryTight?2:tight?4:compact?5:6)};
+            var line=new Border {Height=1,Margin=new Thickness(0,compact?4:6,0,compact?4:6)};
             line.SetResourceReference(Border.BackgroundProperty,"LineBrush"); return line;
         }
         FrameworkElement PreferenceField(string title,ComboBox control) {
@@ -179,8 +187,8 @@ namespace Reswin {
             border.SetResourceReference(Border.BackgroundProperty,"SurfaceBrush"); border.SetResourceReference(Border.BorderBrushProperty,"LineBrush"); return border;
         }
         FrameworkElement SettingRow(string label,FrameworkElement icon,FrameworkElement control) {
-            var row=new Grid { Height=veryTight?28:tight?30:compact?34:40 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(34) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(146) }); row.ColumnDefinitions.Add(new ColumnDefinition());
+            var row=new Grid { Height=tight?32:compact?34:40 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(30) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(146) }); row.ColumnDefinitions.Add(new ColumnDefinition());
             icon.HorizontalAlignment=HorizontalAlignment.Left; icon.VerticalAlignment=VerticalAlignment.Center; icon.Margin=new Thickness(4,0,0,0); row.Children.Add(icon);
             var text=Theme.Text(label,compact?13:14,false); Grid.SetColumn(text,1); row.Children.Add(text);
             var input=control as Control; if(input!=null) {input.MinHeight=tight?26:compact?28:34; input.FontSize=compact?13:14;}
@@ -192,7 +200,7 @@ namespace Reswin {
             var combo=new ComboBox { ItemsSource=new[]{L.T("— Без настройки —"),L.T("Перемещение"),L.T("Изменение размера"),L.T("Центрирование"),L.T("Свернуть"),L.T("Развернуть")},SelectedIndex=Array.IndexOf(actions,settings.Action(button)) };
             Interaction.AnimateDropDown(combo); Theme.Accessible(combo,name+L.T(": действие")); actionControls[button]=combo; combo.ToolTip=ActionHint(settings.Action(button));
             combo.SelectionChanged+=delegate { if(combo.SelectedIndex<0) return; var selected=actions[combo.SelectedIndex]; if(button==0) settings.Left=selected; else if(button==1) settings.Right=selected; else if(button==2) settings.Middle=selected; else if(button==3) settings.Back=selected; else settings.Forward=selected; combo.ToolTip=ActionHint(selected); RefreshGestureHints(); changed(); };
-            var glyph=button==3?Icons.Lucide("arrow-left"):button==4?Icons.Lucide("arrow-right"):Icons.Mouse(icon); glyph.Width=22; glyph.Height=22; return SettingRow(name,glyph,combo);
+            return SettingRow(name,Icons.Lucide(icon,20),combo);
         }
         void RefreshActionHints() {
             for(int button=0;button<actionControls.Length;button++)
@@ -205,7 +213,7 @@ namespace Reswin {
             var names=new[]{"Левая кнопка","Правая кнопка","Средняя кнопка","Боковая назад","Боковая вперёд"};
             for(int button=0;button<names.Length;button++) if(settings.Action(button)==WindowAction.Move) moveButtons.Add(L.T(names[button]));
             string assignment=moveButtons.Count==0?L.T("Сначала назначьте действие «Перемещение» кнопке мыши."):string.Format(L.T("Для перемещения: {0}."),string.Join(" / ",moveButtons.ToArray()));
-            string topHint=assignment+"\n\n"+string.Format(L.T("Удерживайте {0} и кнопку мыши с действием «Перемещение». Перетащите окно за любую его часть к верхнему краю экрана и отпустите кнопку мыши, чтобы развернуть окно."),modifier);
+            string topHint=assignment+"\n\n"+string.Format(L.T("Удерживайте {0} и кнопку мыши с действием «Перемещение». Доведите курсор до верхнего, левого или правого края экрана и отпустите кнопку мыши. Верхний край разворачивает окно; боковые края размещают его на соответствующей половине экрана."),modifier);
             string doubleHint=assignment+"\n\n"+string.Format(L.T("Удерживайте {0} и дважды нажмите кнопку мыши с действием «Перемещение» в любой части окна. Окно развернётся; повторное двойное нажатие вернёт прежний размер и положение."),modifier);
             maximizeAtTop.ToolTip=topHint; maximizeDoubleClick.ToolTip=doubleHint;
             AutomationProperties.SetHelpText(maximizeAtTop,topHint); AutomationProperties.SetHelpText(maximizeDoubleClick,doubleHint);

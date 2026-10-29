@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace Reswin {
     internal static class Native {
+        static bool arrangedAvailable=true;
         internal delegate IntPtr HookProc(int code, IntPtr message, IntPtr data);
         internal delegate bool EnumProc(IntPtr window, IntPtr data);
         [StructLayout(LayoutKind.Sequential)] internal struct Point { public int X,Y; public Point(int x,int y) { X=x; Y=y; } }
@@ -42,6 +43,7 @@ namespace Reswin {
         [DllImport("user32.dll")] internal static extern bool IsWindowVisible(IntPtr window);
         [DllImport("user32.dll")] internal static extern bool IsIconic(IntPtr window);
         [DllImport("user32.dll")] internal static extern bool IsZoomed(IntPtr window);
+        [DllImport("user32.dll",EntryPoint="IsWindowArranged")] static extern bool IsWindowArrangedCore(IntPtr window);
         [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(IntPtr window,out uint process);
         [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern int GetWindowText(IntPtr window,StringBuilder text,int count);
         [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern int GetClassName(IntPtr window,StringBuilder text,int count);
@@ -94,6 +96,76 @@ namespace Reswin {
             try { int value=GetSystemMetricsForDpi(index,dpi); if(value!=0) return Math.Max(1,Math.Abs(value)); }
             catch(EntryPointNotFoundException) { }
             return Math.Max(1,Math.Abs(GetSystemMetrics(index)));
+        }
+        internal static bool IsArranged(IntPtr window) {
+            // Available from Windows10 1903. Older systems keep the original
+            // maximized-window path without depending on a missing export.
+            if(!arrangedAvailable) return false;
+            try { return IsWindowArrangedCore(window); }
+            catch(EntryPointNotFoundException) { arrangedAvailable=false; return false; }
+        }
+        static Input SnapKey(int key,bool up=false) {
+            bool extended=key==0x5B || key==0x25 || key==0x27;
+            return new Input {Type=1,Keyboard=new KeyboardInput {Key=(ushort)key,Flags=(extended?1u:0u)|(up?2u:0u)}};
+        }
+        internal static bool CanSendSnapKeys(int modifier) {
+            if(modifier!=0xA2 && modifier!=0xA4) return false;
+            // Never turn Ctrl+Win+Arrow into a desktop switch, or temporarily
+            // release a user's extra Shift/Win/AltGr/other shortcut combination.
+            for(int key=1;key<256;key++) {
+                if(key==modifier || key==(modifier==0xA2?0x11:0x12)) continue;
+                if((GetAsyncKeyState(key)&0x8000)!=0) return false;
+            }
+            return true;
+        }
+        internal static bool SnapToSide(IntPtr window,bool right,int modifier) {
+            if(GetForegroundWindow()!=window || !CanSendSnapKeys(modifier)) return false;
+            bool held=(GetAsyncKeyState(modifier)&0x8000)!=0;
+            int arrow=right?0x27:0x25;
+            var sequence=new System.Collections.Generic.List<Input>();
+            // Focus may have moved from the previously active application.
+            // Mask Alt in this target too before its temporary key-up.
+            if(held && modifier==0xA4) { sequence.Add(SnapKey(0xE8)); sequence.Add(SnapKey(0xE8,true)); }
+            if(held) sequence.Add(SnapKey(modifier,true));
+            sequence.Add(SnapKey(0x5B)); sequence.Add(SnapKey(arrow));
+            sequence.Add(SnapKey(arrow,true)); sequence.Add(SnapKey(0x5B,true));
+            if(held) {
+                sequence.Add(SnapKey(modifier));
+                // A restored Alt must not become a bare menu key on its real up.
+                if(modifier==0xA4) { sequence.Add(SnapKey(0xE8)); sequence.Add(SnapKey(0xE8,true)); }
+            }
+            // SendInput guarantees this complete array is not interleaved with
+            // physical input. Existing key state is accounted for above.
+            Input[] inputs=sequence.ToArray();
+            uint sent=Inject(inputs);
+            if(sent==inputs.Length) return true;
+            if(sent==0) return false;
+            // If an input filter accepts only a prefix, balance only our downs;
+            // never replay a rejected arrow without its Windows modifier.
+            bool winDown=false,arrowDown=false,modifierReleased=false,maskDown=false;
+            bool modifierRestored=false,maskAfterRestore=false;
+            for(int i=0;i<Math.Min((int)sent,inputs.Length);i++) {
+                int key=inputs[i].Keyboard.Key; bool up=(inputs[i].Keyboard.Flags&2)!=0;
+                if(key==0x5B) winDown=!up;
+                else if(key==arrow) arrowDown=!up;
+                else if(key==modifier) { modifierReleased=up; if(!up) modifierRestored=true; }
+                else if(key==0xE8) { maskDown=!up; if(!up && modifierRestored) maskAfterRestore=true; }
+            }
+            var balance=new System.Collections.Generic.List<Input>();
+            if(maskDown) balance.Add(SnapKey(0xE8,true));
+            if(arrowDown) balance.Add(SnapKey(arrow,true));
+            if(winDown) {
+                balance.Add(SnapKey(0xE8)); balance.Add(SnapKey(0xE8,true));
+                balance.Add(SnapKey(0x5B,true));
+            }
+            if(modifierReleased) {
+                balance.Add(SnapKey(modifier));
+                if(modifier==0xA4) { balance.Add(SnapKey(0xE8)); balance.Add(SnapKey(0xE8,true)); }
+            } else if(modifier==0xA4 && modifierRestored && !maskAfterRestore) {
+                balance.Add(SnapKey(0xE8)); balance.Add(SnapKey(0xE8,true));
+            }
+            if(balance.Count!=0) Inject(balance.ToArray());
+            return false;
         }
         internal static void MaskAltMenu() {
             // An otherwise unused key prevents a consumed Alt+mouse gesture from
