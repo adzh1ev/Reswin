@@ -5,6 +5,16 @@ namespace Reswin {
     internal static class L {
         internal static AppLanguage Language=AppLanguage.Russian;
         static readonly Dictionary<string,string> English=new Dictionary<string,string> {
+            {"Сворачивать в трей","Close to tray"},
+            {"При нажатии на крестик оставлять Reswin в трее. Если выключено, крестик полностью закрывает приложение.","Keep Reswin in the tray when closing the window. When disabled, the close button exits the application completely."},
+            {"Акцентный цвет","Accent color"},
+            {"Коралловый","Coral"},
+            {"Голубой","Sky blue"},
+            {"Зелёный","Green"},
+            {"Оливковый","Olive"},
+            {"Персиковый","Peach"},
+            {"Серо-голубой","Blue gray"},
+            {"Жёлтый","Yellow"},
             {"Управление","Controls"},
             {"Настройки","Settings"},
             {"Действие Reswin не назначено. Кнопка мыши работает как обычно.","No Reswin action is assigned. The mouse button works normally."},

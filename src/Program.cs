@@ -32,37 +32,58 @@ namespace Reswin {
         static void Run(EventWaitHandle show,bool trayOnly) {
             var app=new Application { ShutdownMode=ShutdownMode.OnExplicitShutdown };
             string warning; var settings=Settings.Load(out warning);
-            Theme.Preference=settings.Appearance; L.Language=settings.Language;
+            Theme.Preference=settings.Appearance; Theme.AccentColor=settings.AccentColor; L.Language=settings.Language;
             using(var engine=new WindowEngine(settings,app.Dispatcher))
             using(var tray=new Forms.NotifyIcon())
             using(var icon=MakeIcon()) {
-                MainWindow window=null; int selectedTab=0;
-                Action reveal=null; bool themeInstalled=false; bool rebuilding=false;
+                MainWindow window=null;
+                Action reveal=null; bool themeInstalled=false,exiting=false;
                 var menu=new TrayMenu();
                 var open=new Forms.ToolStripMenuItem(L.T("Открыть настройки"));
                 var pause=new Forms.ToolStripMenuItem(settings.Enabled?L.T("Приостановить"):L.T("Возобновить")) { Checked=settings.Enabled,CheckOnClick=false };
                 var exit=new Forms.ToolStripMenuItem(L.T("Выйти"));
+                string lastStatus=warning;
+                using(var persistence=new SettingsPersistence(delegate(Exception error) {
+                    if(app.Dispatcher.HasShutdownStarted) return;
+                    try {app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(delegate {
+                        lastStatus=L.T("Не удалось сохранить: ")+error.Message;
+                        if(window!=null) window.SetStatus(lastStatus);
+                    }));} catch(InvalidOperationException) { }
+                })) {
+                var appliedSettings=settings.Snapshot();
                 Action save=delegate {
                     bool languageChanged=L.Language!=settings.Language;
+                    var snapshot=settings.Snapshot();
+                    bool behaviorChanged=!Settings.SameBehavior(appliedSettings,snapshot);
+                    bool enabledChanged=appliedSettings.Enabled!=snapshot.Enabled;
+                    appliedSettings=snapshot;
                     L.Language=settings.Language;
-                    open.Text=L.T("Открыть настройки"); pause.Text=settings.Enabled?L.T("Приостановить"):L.T("Возобновить"); exit.Text=L.T("Выйти");
-                    if(languageChanged && window!=null && !rebuilding) {
-                        rebuilding=true;
-                        app.Dispatcher.BeginInvoke(new Action(delegate {
-                            double left=window.Left,top=window.Top; selectedTab=window.SelectedTab; var old=window;
-                            old.AllowClose=true; old.Close(); window=null;
-                            reveal(); window.Left=left; window.Top=top; rebuilding=false;
-                        }));
+                    if(languageChanged) {
+                        open.Text=L.T("Открыть настройки"); exit.Text=L.T("Выйти");
+                        // Retain the window, pages, scroll positions and hooks.
+                        // MainWindow replaces only translated text and animates it.
+                        if(window!=null && !exiting) window.RefreshLanguage();
                     }
-                    engine.Cancel(); pause.Checked=settings.Enabled; tray.Text=settings.Enabled?L.T("Reswin · включено"):L.T("Reswin · пауза");
-                    try { settings.Save(); if(window!=null) window.SetStatus(L.T("Работает в трее · настройки сохраняются сразу")); }
-                    catch(Exception e) { if(window!=null) window.SetStatus(L.T("Не удалось сохранить: ")+e.Message); }
+                    if(languageChanged || enabledChanged) {
+                        pause.Text=settings.Enabled?L.T("Приостановить"):L.T("Возобновить");
+                        pause.Checked=settings.Enabled;
+                        tray.Text=settings.Enabled?L.T("Reswin · включено"):L.T("Reswin · пауза");
+                    }
+                    if(behaviorChanged && !exiting) engine.Cancel();
+                    persistence.Schedule(snapshot);
                 };
-                string lastStatus=warning;
+                Action exitApplication=delegate {
+                    if(exiting) return;
+                    exiting=true;
+                    if(window!=null) window.AllowClose=true;
+                    tray.Visible=false; engine.Dispose(); app.Shutdown();
+                };
                 reveal=delegate {
+                    if(exiting) return;
                     if(window==null) {
                         if(!themeInstalled) { Theme.Install(app); themeInstalled=true; }
-                        window=new MainWindow(settings,save,false,selectedTab);
+                        window=new MainWindow(settings,save);
+                        window.ExitRequested+=exitApplication;
                         window.Icon=System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon.Handle,Int32Rect.Empty,BitmapSizeOptions.FromEmptyOptions());
                         app.MainWindow=window;
                         if(lastStatus!=null) window.SetStatus(lastStatus);
@@ -71,16 +92,30 @@ namespace Reswin {
                 };
                 open.Click+=delegate { reveal(); }; tray.DoubleClick+=delegate { reveal(); };
                 pause.Click+=delegate { settings.Enabled=!settings.Enabled; if(window!=null) window.SyncEnabled(); else save(); };
-                exit.Click+=delegate { if(window!=null) window.AllowClose=true; tray.Visible=false; engine.Dispose(); app.Shutdown(); };
+                exit.Click+=delegate {exitApplication();};
                 menu.Items.Add(open); menu.Items.Add(pause); menu.Items.Add(new Forms.ToolStripSeparator()); menu.Items.Add(exit);
                 tray.Icon=icon; tray.ContextMenuStrip=menu; tray.Text=settings.Enabled?L.T("Reswin · включено"):L.T("Reswin · пауза"); tray.Visible=true;
                 engine.Status+=delegate(string text) { lastStatus=text; if(window!=null) window.SetStatus(text); };
                 engine.Start();
-                var registration=ThreadPool.RegisterWaitForSingleObject(show,delegate { app.Dispatcher.BeginInvoke(reveal); },null,Timeout.Infinite,false);
-                UserPreferenceChangedEventHandler themeChanged=delegate { app.Dispatcher.BeginInvoke(new Action(delegate { if(window!=null) Theme.Refresh(app); })); };
+                var registration=ThreadPool.RegisterWaitForSingleObject(show,delegate {
+                    if(app.Dispatcher.HasShutdownStarted) return;
+                    try {app.Dispatcher.BeginInvoke(reveal);} catch(InvalidOperationException) { }
+                },null,Timeout.Infinite,false);
+                int themeRefreshPending=0;
+                UserPreferenceChangedEventHandler themeChanged=delegate(object sender,UserPreferenceChangedEventArgs e) {
+                    bool accessibility=e.Category==UserPreferenceCategory.Accessibility;
+                    if(!accessibility && e.Category!=UserPreferenceCategory.General && e.Category!=UserPreferenceCategory.Color && e.Category!=UserPreferenceCategory.VisualStyle) return;
+                    if(!accessibility && settings.Appearance!=ThemeMode.System) return;
+                    if(app.Dispatcher.HasShutdownStarted || Interlocked.CompareExchange(ref themeRefreshPending,1,0)!=0) return;
+                    try {app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(delegate {
+                        Interlocked.Exchange(ref themeRefreshPending,0);
+                        if(themeInstalled) Theme.Refresh(app);
+                    }));} catch(InvalidOperationException) {Interlocked.Exchange(ref themeRefreshPending,0);}
+                };
                 SystemEvents.UserPreferenceChanged+=themeChanged;
                 try { if(!trayOnly) reveal(); app.Run(); }
                 finally { registration.Unregister(null); SystemEvents.UserPreferenceChanged-=themeChanged; tray.Visible=false; menu.Dispose(); }
+                }
             }
         }
         internal static System.Drawing.Icon MakeIcon() {

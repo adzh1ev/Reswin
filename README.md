@@ -2,7 +2,7 @@
 
 A small Windows utility that lets you move and resize windows from anywhere inside them. Hold a modifier key, then use your mouse.
 
-[Download 1.1.4](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.4) · [Русский](README.ru.md)
+[Download 1.1.5](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.5) · [Русский](README.ru.md)
 
 ## Get started
 
@@ -35,6 +35,8 @@ Settings are split into three tabs: **Controls**, **Exclusions**, and **Settings
 - Use **Enable application**, next to Start with Windows, to pause or resume window controls and scrolling.
 - Add running applications to **Exclusions** using **+**. All windows of that executable will be ignored. Remove an entry with **×**.
 - Choose a light, dark or system theme, and Russian or English.
+- Theme changes reveal from the center; language changes keep the same window and page state. Settings also offers coral and six pastel accent colors.
+- Enable **Close to tray** to keep Reswin running after pressing the window's close button. Disable it to exit the application with that button.
 - Enable **Start with Windows** to launch in the tray when you sign in. It stays off until you turn it on.
 
 Settings save automatically to `%LOCALAPPDATA%\Reswin\settings.xml`. Exclusions use the executable's full path; add an application again if that path changes.
@@ -64,7 +66,7 @@ To control an application running as administrator, Reswin needs the same privil
 
 ## Changes
 
-See [what changed in 1.1.4](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.4).
+See [what changed in 1.1.5](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.5).
 
 ## Font and icon credits
 

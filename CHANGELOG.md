@@ -1,5 +1,43 @@
 # Изменения Reswin / Reswin changelog
 
+## 1.1.5
+
+# Русский
+
+## Что нового в Reswin 1.1.5
+
+- **Плавная смена темы.** Светлая и тёмная темы раскрываются из центра окна. Быстрые повторные переключения объединяются по кадрам.
+- **Смена языка без пересоздания окна.** Русский и английский переключаются с плавным переходом. Выбранная вкладка, прокрутка списков и настройки остаются на месте.
+- **Семь акцентных цветов.** К коралловому добавлены голубой, зелёный, оливковый, персиковый, серо-голубой и жёлтый. Выбор сохраняется; подписи адаптируются к светлым акцентам.
+- **Настройка «Сворачивать в трей».** Если включена, крестик скрывает окно, а Reswin продолжает работать в трее. Если выключена, крестик полностью завершает приложение.
+- **Исправлена иконка чёрного списка.** Круг и диагональ теперь рисуются в одинаковых координатах, без выступающей линии.
+- **Меньше повторной работы при быстрых действиях.** Сохранение настроек перенесено в фон, поиск фильтрует готовые строки, а список исключений обновляет только изменённые элементы. Геометрия иконок переиспользуется, кэш иконок приложений ограничен, временные изображения переходов освобождаются после анимации.
+
+## Как обновиться
+
+Выйдите из старого Reswin через меню в трее, распакуйте `Reswin-portable.zip` в постоянную папку и запустите `Reswin.exe`. Настройки и чёрный список сохраняются. Шрифт встроен в приложение.
+
+Требования: Windows 10/11 x64 и .NET Framework 4.8.
+
+---
+
+# English
+
+## What's new in Reswin 1.1.5
+
+- **Smooth theme changes.** Light and dark themes reveal from the center of the window. Rapid changes are coalesced per frame.
+- **Language changes without rebuilding the window.** Russian and English switch with a smooth transition. The selected tab, list scroll positions and settings stay in place.
+- **Seven accent colors.** Coral is joined by sky blue, green, olive, peach, blue gray and yellow. Your choice is saved, and labels adapt to light accent colors.
+- **Close to tray setting.** When enabled, the close button hides the window while Reswin keeps running in the tray. When disabled, it exits the application completely.
+- **Fixed the exclusions icon.** The circle and diagonal now use matching coordinates, without a protruding line.
+- **Less repeated work during rapid interaction.** Settings save in the background, search filters existing rows, and the exclusions list updates only changed items. Icon geometry is reused, the application icon cache is bounded, and temporary transition images are released after the animation.
+
+## How to update
+
+Exit the old Reswin instance using the tray menu, extract `Reswin-portable.zip` to a permanent folder, and launch `Reswin.exe`. Your settings and exclusions are preserved. The font is bundled with the application.
+
+Requirements: Windows 10/11 x64 and .NET Framework 4.8.
+
 ## 1.1.4
 
 # Русский

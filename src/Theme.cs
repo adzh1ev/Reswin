@@ -10,7 +10,22 @@ using Microsoft.Win32;
 namespace Reswin {
     internal static class Theme {
         internal static ThemeMode Preference=ThemeMode.System;
+        internal static string AccentColor=Settings.AccentColors[0];
+        internal static string[] AccentColors {get {return Settings.AccentColors;}}
+        const string StateKey="Reswin.Theme.State";
+        sealed class PaletteState {
+            internal bool StylesInstalled,Initialized,Dark,HighContrast;
+            internal string Accent;
+            internal Color Window,WindowText,Highlight,HighlightText;
+        }
+        static PaletteState State(Application app) {
+            var state=app.Resources[StateKey] as PaletteState;
+            if(state==null) {state=new PaletteState(); app.Resources[StateKey]=state;}
+            return state;
+        }
         internal static void Install(Application app) {
+            var state=State(app);
+            if(state.StylesInstalled) {Refresh(app); return;}
             app.Resources["UIFontFamily"]=Typography.Family;
             app.Resources["MotionEaseOut"]=Interaction.EaseOut;
             string markup=@"<ResourceDictionary xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
@@ -23,11 +38,11 @@ namespace Reswin {
    <Border Height='4' Margin='12,0,12,0' CornerRadius='2' Background='{DynamicResource LineBrush}'/>
    <Track x:Name='PART_Track' Orientation='Horizontal' IsDirectionReversed='{TemplateBinding IsDirectionReversed}' Minimum='{TemplateBinding Minimum}' Maximum='{TemplateBinding Maximum}' Value='{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}'>
     <Track.DecreaseRepeatButton><RepeatButton Focusable='False' IsTabStop='False' Command='{x:Static Slider.DecreaseLarge}'>
-     <RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Height='4' Margin='12,0,-12,0' CornerRadius='2' Background='{DynamicResource AccentBrush}'/></ControlTemplate></RepeatButton.Template>
+     <RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Height='4' Margin='12,0,-12,0' CornerRadius='2' Background='{DynamicResource AccentBrush}' BorderBrush='{DynamicResource AccentOutlineBrush}' BorderThickness='{DynamicResource AccentOutlineThickness}'/></ControlTemplate></RepeatButton.Template>
     </RepeatButton></Track.DecreaseRepeatButton>
     <Track.Thumb><Thumb Width='24' Height='28' Focusable='False' IsTabStop='False'>
      <Thumb.Template><ControlTemplate TargetType='Thumb'><Grid Background='Transparent'>
-      <Ellipse x:Name='ThumbCore' Width='14' Height='14' Fill='{DynamicResource AccentBrush}' RenderTransformOrigin='0.5,0.5'>
+      <Ellipse x:Name='ThumbCore' Width='14' Height='14' Fill='{DynamicResource AccentBrush}' Stroke='{DynamicResource AccentOutlineBrush}' StrokeThickness='{DynamicResource AccentOutlineWidth}' RenderTransformOrigin='0.5,0.5'>
        <Ellipse.RenderTransform><ScaleTransform/></Ellipse.RenderTransform>
       </Ellipse>
      </Grid></ControlTemplate></Thumb.Template>
@@ -120,7 +135,7 @@ namespace Reswin {
 <Style TargetType='CheckBox' x:Key='Switch'><Setter Property='FocusVisualStyle' Value='{x:Null}'/><Setter Property='Foreground' Value='{DynamicResource TextBrush}'/><Setter Property='Cursor' Value='Hand'/>
  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='CheckBox'><Grid Width='52' Height='32' Background='Transparent'>
   <Border Width='48' Height='28' CornerRadius='14' VerticalAlignment='Center' HorizontalAlignment='Center' Background='{DynamicResource SwitchOffBrush}'/>
-  <Border x:Name='ActiveTrack' Width='48' Height='28' CornerRadius='14' VerticalAlignment='Center' HorizontalAlignment='Center' Background='{DynamicResource AccentBrush}' Opacity='0'/>
+  <Border x:Name='ActiveTrack' Width='48' Height='28' CornerRadius='14' VerticalAlignment='Center' HorizontalAlignment='Center' Background='{DynamicResource AccentBrush}' BorderBrush='{DynamicResource AccentOutlineBrush}' BorderThickness='{DynamicResource AccentOutlineThickness}' Opacity='0'/>
   <Ellipse x:Name='Thumb' Fill='{DynamicResource SwitchThumbBrush}' Width='22' Height='22' VerticalAlignment='Center' HorizontalAlignment='Left' Margin='5,0,0,0'/>
  </Grid><ControlTemplate.Triggers><Trigger Property='IsChecked' Value='True'><Setter TargetName='Thumb' Property='Fill' Value='{DynamicResource AccentForegroundBrush}'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='0.45'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
 </Style>
@@ -144,24 +159,34 @@ namespace Reswin {
  </ControlTemplate></Setter.Value></Setter></Style>
 </ResourceDictionary>";
             app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(markup));
+            state.StylesInstalled=true;
             Refresh(app);
         }
         internal static void Refresh(Application app,bool? darkOverride=null) {
-            bool dark=false;
-            using(var key=Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")) { if(key!=null) dark=Convert.ToInt32(key.GetValue("AppsUseLightTheme",1))==0; }
-            if(darkOverride.HasValue) dark=darkOverride.Value;
-            else if(Preference!=ThemeMode.System) dark=Preference==ThemeMode.Dark;
+            var state=State(app);
+            bool dark=darkOverride.HasValue?darkOverride.Value:Preference==ThemeMode.System?SystemDark(state.Initialized && state.Dark):Preference==ThemeMode.Dark;
+            bool highContrast=SystemParameters.HighContrast;
+            string selected=Settings.NormalizeAccentColor(AccentColor);
+            if(state.Initialized && state.Dark==dark && state.HighContrast==highContrast && state.Accent==selected &&
+                (!highContrast || (state.Window==SystemColors.WindowColor && state.WindowText==SystemColors.WindowTextColor &&
+                    state.Highlight==SystemColors.HighlightColor && state.HighlightText==SystemColors.HighlightTextColor))) return;
+            Color accent=ColorOf(selected);
+            Color surface=ColorOf(dark?"#23272D":"#FFFFFF");
+            Color foreground=Contrast(accent,Colors.White)>=Contrast(accent,ColorOf("#18212A"))?Colors.White:ColorOf("#18212A");
+            Color ink=Readable(accent,ColorOf(dark?"#23272D":"#F1F3F5"));
             Set(app,"BackgroundBrush",dark?"#191C20":"#F1F3F5");
             Set(app,"SurfaceBrush",dark?"#23272D":"#FFFFFF");
             Set(app,"ControlBrush",dark?"#2E343C":"#F1F3F5");
             Set(app,"ChromeBrush",dark?"#191C20":"#F1F3F5");
-            Set(app,"AccentBrush","#D03E36");
-            Set(app,"AccentForegroundBrush","#FFFFFF");
-            Set(app,"AccentHoverBrush","#B9342E");
-            Set(app,"AccentSoftBrush",dark?"#3A2527":"#FBEDEB");
-            Set(app,"AccentInkBrush",dark?"#FA8B83":"#B4312A");
+            Set(app,"AccentBrush",accent);
+            Set(app,"AccentForegroundBrush",foreground);
+            Set(app,"AccentHoverBrush",Mix(accent,Colors.Black,0.12));
+            Set(app,"AccentSoftBrush",Mix(surface,accent,dark?0.16:0.12));
+            Set(app,"AccentInkBrush",ink);
+            bool outline=Contrast(accent,surface)<3;
+            Set(app,"AccentOutlineBrush",ink);
             Set(app,"NavigationBrush",dark?"#23272D":"#FFFFFF");
-            Set(app,"NavigationHoverBrush",dark?"#343038":"#F8F1F0");
+            Set(app,"NavigationHoverBrush",Mix(surface,accent,dark?0.09:0.05));
             Set(app,"PopupBrush",dark?"#292E35":"#FFFFFF");
             Set(app,"TextBrush",dark?"#F1F3F5":"#24292F");
             Set(app,"MutedBrush",dark?"#B1BAC5":"#616B77");
@@ -170,21 +195,59 @@ namespace Reswin {
             Set(app,"HoverBrush",dark?"#3D4651":"#E3E9EE");
             Set(app,"SwitchOffBrush",dark?"#646C77":"#8D97A4");
             Set(app,"SwitchThumbBrush","#FFFFFF");
-            Set(app,"FocusBrush",dark?"#FA8B83":"#D03E36");
+            Set(app,"FocusBrush",ink);
             Set(app,"RimBrush",dark?"#383F48":"#FFFFFF");
-            if(SystemParameters.HighContrast) {
-                foreach(string name in new[]{"BackgroundBrush","SurfaceBrush","ControlBrush","ChromeBrush","PopupBrush","HoverBrush","NavigationBrush","NavigationHoverBrush","AccentSoftBrush"}) app.Resources[name]=SystemColors.WindowBrush;
-                foreach(string name in new[]{"TextBrush","MutedBrush","LineBrush","ControlLineBrush","RimBrush","SwitchOffBrush"}) app.Resources[name]=SystemColors.WindowTextBrush;
-                app.Resources["AccentBrush"]=SystemColors.HighlightBrush; app.Resources["FocusBrush"]=SystemColors.HighlightBrush;
-                app.Resources["AccentHoverBrush"]=SystemColors.HighlightBrush; app.Resources["AccentInkBrush"]=SystemColors.HighlightBrush;
-                app.Resources["AccentForegroundBrush"]=SystemColors.HighlightTextBrush; app.Resources["SwitchThumbBrush"]=SystemColors.WindowBrush;
+            if(highContrast) {
+                foreach(string name in new[]{"BackgroundBrush","SurfaceBrush","ControlBrush","ChromeBrush","PopupBrush","HoverBrush","NavigationBrush","NavigationHoverBrush","AccentSoftBrush"}) Set(app,name,SystemColors.WindowColor);
+                foreach(string name in new[]{"TextBrush","MutedBrush","LineBrush","ControlLineBrush","RimBrush","SwitchOffBrush"}) Set(app,name,SystemColors.WindowTextColor);
+                Set(app,"AccentBrush",SystemColors.HighlightColor); Set(app,"FocusBrush",SystemColors.HighlightColor);
+                Set(app,"AccentHoverBrush",SystemColors.HighlightColor); Set(app,"AccentInkBrush",SystemColors.HighlightColor);
+                Set(app,"AccentForegroundBrush",SystemColors.HighlightTextColor); Set(app,"SwitchThumbBrush",SystemColors.WindowColor);
+                Set(app,"AccentOutlineBrush",SystemColors.WindowTextColor); outline=true;
+            }
+            app.Resources["AccentOutlineWidth"]=outline?1.0:0.0;
+            app.Resources["AccentOutlineThickness"]=new Thickness(outline?1:0);
+            state.Dark=dark; state.HighContrast=highContrast; state.Accent=selected; state.Initialized=true;
+            if(highContrast) {
+                state.Window=SystemColors.WindowColor; state.WindowText=SystemColors.WindowTextColor;
+                state.Highlight=SystemColors.HighlightColor; state.HighlightText=SystemColors.HighlightTextColor;
             }
         }
-        static Color ColorOf(string value) { return (Color)ColorConverter.ConvertFromString(value); }
+        static bool SystemDark(bool fallback) {
+            try {
+                using(var key=Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                    return key==null?false:Convert.ToInt32(key.GetValue("AppsUseLightTheme",1))==0;
+            } catch(System.Security.SecurityException) {return fallback;}
+            catch(UnauthorizedAccessException) {return fallback;}
+            catch(System.IO.IOException) {return fallback;}
+            catch(FormatException) {return fallback;}
+            catch(InvalidCastException) {return fallback;}
+            catch(OverflowException) {return fallback;}
+        }
+        static Color ColorOf(string value) {
+            return Color.FromRgb((byte)(Hex(value[1])*16+Hex(value[2])),(byte)(Hex(value[3])*16+Hex(value[4])),(byte)(Hex(value[5])*16+Hex(value[6])));
+        }
+        static int Hex(char value) {return value<='9'?value-'0':char.ToUpperInvariant(value)-'A'+10;}
+        static Color Mix(Color from,Color to,double amount) {
+            return Color.FromRgb((byte)Math.Round(from.R+(to.R-from.R)*amount),(byte)Math.Round(from.G+(to.G-from.G)*amount),(byte)Math.Round(from.B+(to.B-from.B)*amount));
+        }
+        static double Channel(byte value) {double v=value/255.0; return v<=0.04045?v/12.92:Math.Pow((v+0.055)/1.055,2.4);}
+        static double Luminance(Color value) {return 0.2126*Channel(value.R)+0.7152*Channel(value.G)+0.0722*Channel(value.B);}
+        static double Contrast(Color a,Color b) {double first=Luminance(a),second=Luminance(b); return (Math.Max(first,second)+0.05)/(Math.Min(first,second)+0.05);}
+        static Color Readable(Color accent,Color background) {
+            Color end=Luminance(background)<0.2?Colors.White:Colors.Black;
+            for(int step=0;step<=32;step++) {var candidate=Mix(accent,end,step/32.0); if(Contrast(candidate,background)>=4.5) return candidate;}
+            return end;
+        }
         static void Set(Application app,string name,string color) {
-            // Apply a theme as one palette; per-brush transitions would smear text
-            // and surface colors during a light/dark change.
-            app.Resources[name]=new SolidColorBrush(ColorOf(color));
+            Set(app,name,ColorOf(color));
+        }
+        static void Set(Application app,string name,Color color) {
+            // Stable role brushes avoid invalidating the entire resource graph.
+            // The transition snapshots the old palette; colors commit atomically.
+            var brush=app.Resources[name] as SolidColorBrush;
+            if(brush!=null && !brush.IsFrozen) {if(brush.Color!=color) brush.Color=color;}
+            else app.Resources[name]=new SolidColorBrush(color);
         }
         internal static TextBlock Text(string text,double size,bool muted) {
             var block=new TextBlock { Text=text,FontSize=size,VerticalAlignment=VerticalAlignment.Center };

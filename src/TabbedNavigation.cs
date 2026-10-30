@@ -115,6 +115,17 @@ namespace Reswin {
             get {return selected;}
             set {if(value<0 || value>=pages.Length) throw new ArgumentOutOfRangeException("value"); tabs.SelectedIndex=value;}
         }
+        internal void SetLabels(string[] labels) {
+            if(labels==null || labels.Length!=pages.Length) throw new ArgumentException("The tab label count must match the page count.");
+            for(int i=0;i<labels.Length;i++) {
+                var item=(TabItem)tabs.Items[i];
+                var normal=(StackPanel)item.Header;
+                ((TextBlock)normal.Children[1]).Text=labels[i];
+                var active=(StackPanel)activeHeaders.Children[i];
+                ((TextBlock)active.Children[1]).Text=labels[i];
+                Theme.Accessible(item,labels[i]);
+            }
+        }
         static FrameworkElement Header(string label,string icon,string foreground) {
             var row=new StackPanel {Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
             var glyph=Icons.Lucide(icon,18,foreground); glyph.Margin=new Thickness(0,0,7,0); row.Children.Add(glyph);

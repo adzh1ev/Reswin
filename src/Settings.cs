@@ -12,9 +12,14 @@ namespace Reswin {
     public class Settings {
         public const double MinScrollSensitivity=0.25;
         public const double MaxScrollSensitivity=2.0;
+        internal static readonly string[] AccentColors={"#D03E36","#85D9F9","#BEF5AC","#B3B27C","#FEC28F","#9FB7CC","#FDEDB1"};
+        static readonly Lazy<XmlSerializer> serializer=new Lazy<XmlSerializer>(delegate {return new XmlSerializer(typeof(Settings));});
+        static readonly object persistenceGate=new object();
         public bool Enabled {get;set;}
         public ThemeMode Appearance {get;set;}
         public AppLanguage Language {get;set;}
+        public string AccentColor {get;set;}
+        public bool MinimizeToTray {get;set;}
         public int Modifier {get;set;}
         public ScrollBinding ScrollKey {get;set;}
         public double ScrollSensitivity {get;set;}
@@ -26,7 +31,14 @@ namespace Reswin {
         public WindowAction Back {get;set;}
         public WindowAction Forward {get;set;}
         public List<Exclusion> Exclusions {get;set;}
-        public Settings() { Enabled=true; Modifier=0xA2; ScrollKey=ScrollBinding.OtherModifier; ScrollSensitivity=1.0; MaximizeOnTopEdge=true; MaximizeOnDoubleClick=true; Left=WindowAction.Move; Right=WindowAction.Resize; Middle=WindowAction.Center; Back=WindowAction.Minimize; Forward=WindowAction.Maximize; Exclusions=new List<Exclusion>(); }
+        public Settings() { Enabled=true; Modifier=0xA2; ScrollKey=ScrollBinding.OtherModifier; ScrollSensitivity=1.0; MaximizeOnTopEdge=true; MaximizeOnDoubleClick=true; AccentColor="#D03E36"; MinimizeToTray=true; Left=WindowAction.Move; Right=WindowAction.Resize; Middle=WindowAction.Center; Back=WindowAction.Minimize; Forward=WindowAction.Maximize; Exclusions=new List<Exclusion>(); }
+        internal static string NormalizeAccentColor(string value) {
+            if(value!=null) {
+                value=value.Trim();
+                foreach(string color in AccentColors) if(string.Equals(value,color,StringComparison.OrdinalIgnoreCase)) return color;
+            }
+            return "#D03E36";
+        }
         internal static double NormalizeScrollSensitivity(double value) {
             if(double.IsNaN(value) || double.IsInfinity(value)) return 1.0;
             return Math.Max(MinScrollSensitivity,Math.Min(MaxScrollSensitivity,value));
@@ -39,12 +51,14 @@ namespace Reswin {
             try {
                 if(!File.Exists(Location)) return new Settings();
                 using(var stream=File.OpenRead(Location)) {
-                    var value=(Settings)new XmlSerializer(typeof(Settings)).Deserialize(stream);
+                    Settings value;
+                    lock(persistenceGate) value=(Settings)serializer.Value.Deserialize(stream);
                     if(value.ScrollKey!=ScrollBinding.None) value.ScrollKey=ScrollBinding.OtherModifier;
                     value.ScrollSensitivity=NormalizeScrollSensitivity(value.ScrollSensitivity);
                     if(value.Modifier!=0xA2 && value.Modifier!=0xA4) value.Modifier=0xA2;
                     if(!Enum.IsDefined(typeof(ThemeMode),value.Appearance)) value.Appearance=ThemeMode.System;
                     if(!Enum.IsDefined(typeof(AppLanguage),value.Language)) value.Language=AppLanguage.Russian;
+                    value.AccentColor=NormalizeAccentColor(value.AccentColor);
                     if(value.Exclusions==null) value.Exclusions=new List<Exclusion>();
                     value.Exclusions.RemoveAll(x=>x==null || string.IsNullOrWhiteSpace(x.Path));
                     if(!Enum.IsDefined(typeof(WindowAction),value.Left)) value.Left=WindowAction.Move;
@@ -57,10 +71,34 @@ namespace Reswin {
             } catch(Exception e) { warning=L.T("Не удалось прочитать настройки: ")+e.Message; return new Settings(); }
         }
         internal void Save() {
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Location));
-            string temp=Location+".tmp";
-            using(var stream=File.Create(temp)) new XmlSerializer(typeof(Settings)).Serialize(stream,this);
-            if(File.Exists(Location)) File.Replace(temp,Location,null); else File.Move(temp,Location);
+            lock(persistenceGate) {
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Location));
+                string temp=Location+".tmp";
+                try {
+                    using(var stream=File.Create(temp)) serializer.Value.Serialize(stream,this);
+                    if(File.Exists(Location)) File.Replace(temp,Location,null); else File.Move(temp,Location);
+                } catch {
+                    try { if(File.Exists(temp)) File.Delete(temp); } catch { }
+                    throw;
+                }
+            }
+        }
+        // Capture on the UI thread. The background writer owns this independent
+        // object and never enumerates the live exclusions while they are edited.
+        internal Settings Snapshot() {
+            var snapshot=(Settings)MemberwiseClone();
+            snapshot.AccentColor=NormalizeAccentColor(AccentColor);
+            snapshot.Exclusions=new List<Exclusion>(Exclusions.Count);
+            foreach(var exclusion in Exclusions) snapshot.Exclusions.Add(new Exclusion {Name=exclusion.Name,Path=exclusion.Path});
+            return snapshot;
+        }
+        internal static bool SameBehavior(Settings a,Settings b) {
+            if(a.Enabled!=b.Enabled || a.Modifier!=b.Modifier || a.ScrollKey!=b.ScrollKey || a.ScrollSensitivity!=b.ScrollSensitivity ||
+                a.MaximizeOnTopEdge!=b.MaximizeOnTopEdge || a.MaximizeOnDoubleClick!=b.MaximizeOnDoubleClick ||
+                a.Left!=b.Left || a.Right!=b.Right || a.Middle!=b.Middle || a.Back!=b.Back || a.Forward!=b.Forward ||
+                a.Exclusions.Count!=b.Exclusions.Count) return false;
+            for(int i=0;i<a.Exclusions.Count;i++) if(!string.Equals(a.Exclusions[i].Path,b.Exclusions[i].Path,StringComparison.OrdinalIgnoreCase)) return false;
+            return true;
         }
     }
     internal static class Geometry {
