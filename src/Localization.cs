@@ -5,6 +5,13 @@ namespace Reswin {
     internal static class L {
         internal static AppLanguage Language=AppLanguage.Russian;
         static readonly Dictionary<string,string> English=new Dictionary<string,string> {
+            {"Примагничивание","Magnetism"},
+            {"К краям экрана","Screen edges"},
+            {"К другим окнам","Other windows"},
+            {"Магнит к краям экрана","Magnet to screen edges"},
+            {"Магнит к окнам","Magnet to windows"},
+            {"При перемещении рамка окна притягивается к краям рабочей области экрана без изменения размера. Потяните дальше, чтобы открепить.","While moving, the window border attracts to the edges of the screen work area without resizing. Pull further to detach."},
+            {"При перемещении рамка окна притягивается к рамкам других видимых окон без изменения размера. Потяните дальше, чтобы открепить.","While moving, the window border attracts to other visible window borders without resizing. Pull further to detach."},
             {"Сворачивать в трей","Close to tray"},
             {"При нажатии на крестик оставлять Reswin в трее. Если выключено, крестик полностью закрывает приложение.","Keep Reswin in the tray when closing the window. When disabled, the close button exits the application completely."},
             {"Акцентный цвет","Accent color"},
@@ -35,7 +42,7 @@ namespace Reswin {
             {"Прокрутка","Scrolling"},
             {"Чувствительность","Sensitivity"},
             {"Чувствительность прокрутки","Scroll sensitivity"},
-            {"Меньше — медленнее и точнее, больше — быстрее. 100% — стандартная чувствительность.","Lower is slower and more precise; higher is faster. 100% is the standard sensitivity."},
+            {"Меньше — медленнее и точнее, больше — быстрее. 100% — стандартная чувствительность. Шаг — 5%.","Lower is slower and more precise; higher is faster. 100% is the standard sensitivity. Adjusts in 5% steps."},
             {"Прокрутка удержанием","Hold to scroll"},
             {"Левый Alt (авто)","Left Alt (auto)"},
             {"Левый Ctrl (авто)","Left Ctrl (auto)"},

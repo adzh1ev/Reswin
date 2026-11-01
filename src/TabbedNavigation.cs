@@ -14,13 +14,14 @@ namespace Reswin {
     // Native tab semantics with an independent, retained page host. Only render
     // transforms and opacity animate; page layout and control values stay intact.
     internal sealed class TabbedNavigation : Grid {
-        const double HeaderHeight=40,SlideDistance=32;
+        const double HeaderHeight=40;
+        static readonly DependencyProperty ProgressProperty=DependencyProperty.Register("Progress",typeof(double),typeof(TabbedNavigation),new PropertyMetadata(0.0,MotionChanged));
+        static readonly DependencyProperty DragOffsetProperty=DependencyProperty.Register("DragOffset",typeof(double),typeof(TabbedNavigation),new PropertyMetadata(0.0,MotionChanged));
         readonly TabControl tabs;
         readonly Grid header=new Grid {Height=HeaderHeight,Background=Brushes.Transparent,Cursor=Cursors.Hand,Clip=System.Windows.Media.Geometry.Empty};
         readonly Grid viewport=new Grid {ClipToBounds=true};
         readonly Border indicator=new Border {CornerRadius=new CornerRadius(9),HorizontalAlignment=HorizontalAlignment.Left,IsHitTestVisible=false};
         readonly TranslateTransform indicatorPosition=new TranslateTransform();
-        readonly TranslateTransform dragCorrection=new TranslateTransform();
         readonly RectangleGeometry indicatorClip=new RectangleGeometry {RadiusX=9,RadiusY=9};
         readonly Grid activeHeaders=new DecorativeHeaderLayer {IsHitTestVisible=false};
         readonly Page[] pages;
@@ -87,11 +88,9 @@ namespace Reswin {
             tabs.SelectedIndex=selected;
             header.Children.Add(tabs);
             indicator.SetResourceReference(Border.BackgroundProperty,"AccentBrush");
-            var indicatorTransform=new TransformGroup();
-            indicatorTransform.Children.Add(indicatorPosition); indicatorTransform.Children.Add(dragCorrection);
-            indicator.RenderTransform=indicatorTransform;
+            indicator.RenderTransform=indicatorPosition;
             header.Children.Add(indicator);
-            indicatorClip.Transform=indicatorTransform; activeHeaders.Clip=indicatorClip;
+            indicatorClip.Transform=indicatorPosition; activeHeaders.Clip=indicatorClip;
             header.Children.Add(activeHeaders);
             tabs.SelectionChanged+=delegate(object sender,SelectionChangedEventArgs e) {
                 if(e.OriginalSource==tabs && tabs.SelectedIndex>=0 && tabs.SelectedIndex!=selected) {
@@ -102,11 +101,12 @@ namespace Reswin {
             header.PreviewMouseMove+=MovePointer;
             header.PreviewMouseLeftButtonUp+=EndPointer;
             header.LostMouseCapture+=delegate {if(pointerPressed) CancelPointer(true);};
-            header.SizeChanged+=delegate {CancelPointer(false); UpdateStripGeometry(); UpdateIndicator(false);};
+            header.SizeChanged+=delegate {CancelPointer(false); UpdateStripGeometry(); SnapPages(); UpdateIndicator();};
+            viewport.SizeChanged+=delegate {CancelPointer(false); SnapPages();};
             IsEnabledChanged+=delegate {if(!IsEnabled) CancelPointer(true);};
-            IsVisibleChanged+=delegate {if(!IsVisible) {CancelPointer(false); UpdateIndicator(false);}};
-            Loaded+=delegate {ready=true; UpdateStripGeometry(); SnapPages(); UpdateIndicator(false);};
-            Unloaded+=delegate {CancelPointer(false); ready=false; generation++; SnapPages(); UpdateIndicator(false);};
+            IsVisibleChanged+=delegate {if(!IsVisible) {CancelPointer(false); SnapPages();}};
+            Loaded+=delegate {ready=true; UpdateStripGeometry(); SnapPages(); UpdateIndicator();};
+            Unloaded+=delegate {CancelPointer(false); ready=false; SnapPages();};
             PreviewKeyDown+=NavigateByKeyboard;
             SnapPages();
         }
@@ -146,16 +146,33 @@ namespace Reswin {
             int index=Math.Min(pages.Length-1,(int)(point.X/(header.ActualWidth/pages.Length)));
             return ((TabItem)tabs.Items[index]).IsEnabled?index:-1;
         }
+        double VisualProgress {
+            get {return Math.Max(0,Math.Min(pages.Length-1,(double)GetValue(ProgressProperty)+(double)GetValue(DragOffsetProperty)));}
+        }
+        static void MotionChanged(DependencyObject sender,DependencyPropertyChangedEventArgs e) {
+            ((TabbedNavigation)sender).UpdateMotion();
+        }
+        void UpdateMotion() {
+            double progress=VisualProgress;
+            double slot=header.ActualWidth/pages.Length,width=viewport.ActualWidth;
+            indicatorPosition.X=slot*progress;
+            // All retained pages move in one coordinate system with the header.
+            // These render transforms do not rebuild or remeasure content on input.
+            for(int i=0;i<pages.Length;i++) pages[i].Position.X=(i-progress)*width;
+        }
         void BeginPointer(object sender,MouseButtonEventArgs e) {
             if(!ready || !IsEnabled || pointerPressed || e.ChangedButton!=MouseButton.Left) return;
             Point point=e.GetPosition(header); int index=TabAt(point);
             if(index<0 || !header.CaptureMouse()) return;
             pointerPressed=true; dragging=false; pressedPoint=point; pressedTab=index;
             grabOffset=point.X-index*(header.ActualWidth/pages.Length);
-            // Preview the pressed tab immediately, but keep its page unchanged
-            // until release. A cancelled drag therefore has no settings side effects.
-            CollapseCorrection();
-            Animate(indicatorPosition,TranslateTransform.XProperty,index*(header.ActualWidth/pages.Length),150,null);
+            // Focusing an unselected native TabItem selects it immediately.
+            // Keep keyboard focus on the committed header throughout preview.
+            ReleasePage(pages[selected].Host,selected);
+            PreparePages(); CollapseOffset();
+            // Preview both the indicator and pages immediately. Only release
+            // commits selection; cancelling therefore does not leave the page.
+            Animate(ProgressProperty,index,150,null);
             e.Handled=true;
         }
         void MovePointer(object sender,MouseEventArgs e) {
@@ -164,29 +181,27 @@ namespace Reswin {
             Point point=e.GetPosition(header);
             if(!dragging && Math.Abs(point.X-pressedPoint.X)>SystemParameters.MinimumHorizontalDragDistance) {
                 dragging=true;
-                double visual=indicatorPosition.X+dragCorrection.X;
-                double target=DragPosition(point.X);
-                Set(indicatorPosition,TranslateTransform.XProperty,target);
-                Set(dragCorrection,TranslateTransform.XProperty,visual-target);
-                // Absorb any still-running press preview without jumping when
-                // the highlight becomes pointer-driven. Further input stays direct.
-                Animate(dragCorrection,TranslateTransform.XProperty,0,150,null);
-            } else if(dragging) Set(indicatorPosition,TranslateTransform.XProperty,DragPosition(point.X));
+                double visual=VisualProgress,target=DragProgress(point.X);
+                Set(ProgressProperty,target); Set(DragOffsetProperty,visual-target);
+                // Carry any unfinished press animation into the direct drag.
+                // The same correction moves the pages and the indicator together.
+                Animate(DragOffsetProperty,0,150,null);
+            } else if(dragging) Set(ProgressProperty,DragProgress(point.X));
             e.Handled=true;
         }
-        double DragPosition(double x) {
+        double DragProgress(double x) {
             double slot=header.ActualWidth/pages.Length;
-            return Math.Max(0,Math.Min(header.ActualWidth-slot,x-grabOffset));
+            return slot<=0?selected:Math.Max(0,Math.Min(pages.Length-1,(x-grabOffset)/slot));
         }
         void EndPointer(object sender,MouseButtonEventArgs e) {
             if(!pointerPressed || e.ChangedButton!=MouseButton.Left) return;
             Point point=e.GetPosition(header); int index=TabAt(point);
-            if(index>=0 && !dragging) index=pressedTab;
+            if(index>=0) index=dragging?(int)Math.Floor(DragProgress(point.X)+0.5):pressedTab;
             CancelPointer(false);
-            if(index<0) UpdateIndicator(true);
+            if(index<0 || !((TabItem)tabs.Items[index]).IsEnabled) Settle(true);
             else {
                 if(index!=selected) tabs.SelectedIndex=index;
-                else UpdateIndicator(true);
+                else Settle(true);
                 ((TabItem)tabs.Items[index]).Focus();
             }
             e.Handled=true;
@@ -194,44 +209,39 @@ namespace Reswin {
         void CancelPointer(bool animateReturn) {
             if(!pointerPressed) return;
             pointerPressed=false; dragging=false;
-            CollapseCorrection();
+            CollapseOffset();
             if(header.IsMouseCaptured) header.ReleaseMouseCapture();
-            if(animateReturn) UpdateIndicator(ready && IsVisible);
+            if(animateReturn) Settle(ready && IsVisible);
         }
-        void CollapseCorrection() {
-            double visual=indicatorPosition.X+dragCorrection.X;
-            Set(dragCorrection,TranslateTransform.XProperty,0);
-            Set(indicatorPosition,TranslateTransform.XProperty,visual);
+        void CollapseOffset() {
+            double visual=VisualProgress;
+            Set(DragOffsetProperty,0); Set(ProgressProperty,visual);
         }
         void Select(int index) {
-            int previous=selected,direction=index>previous?1:-1;
+            int previous=selected;
             ReleasePage(pages[previous].Host,index);
-            selected=index; int version=++generation;
-            bool animate=ready && viewport.ActualWidth>0;
-            UpdateIndicator(animate);
-            if(!animate) SnapPages();
-            else for(int i=0;i<pages.Length;i++) {
-                var page=pages[i]; bool active=i==selected;
-                page.Host.IsHitTestVisible=active;
-                KeyboardNavigation.SetTabNavigation(page.Host,active?KeyboardNavigationMode.Continue:KeyboardNavigationMode.None);
-                if(active) {
-                    if(page.Host.Visibility!=Visibility.Visible) {
-                        Set(page.Position,TranslateTransform.XProperty,-direction*SlideDistance);
-                        Set(page.Host,OpacityProperty,0); page.Host.Visibility=Visibility.Visible;
-                    }
-                    Panel.SetZIndex(page.Host,1);
-                    Animate(page.Position,TranslateTransform.XProperty,0,220,null);
-                    Animate(page.Host,OpacityProperty,1,180,null);
-                } else if(page.Host.Visibility==Visibility.Visible) {
-                    Panel.SetZIndex(page.Host,0);
-                    Animate(page.Position,TranslateTransform.XProperty,direction*SlideDistance,220,null);
-                    int pageIndex=i;
-                    Animate(page.Host,OpacityProperty,0,150,delegate {
-                        if(version==generation && pageIndex!=selected) Hide(page);
-                    });
-                }
-            }
+            selected=index;
+            Settle(ready && viewport.ActualWidth>0 && IsVisible);
             if(SelectionChanged!=null) SelectionChanged(selected);
+        }
+        void PreparePages() {
+            generation++;
+            foreach(var page in pages) {
+                page.Host.Visibility=Visibility.Visible;
+                page.Host.Opacity=1;
+                page.Host.IsHitTestVisible=false;
+                KeyboardNavigation.SetTabNavigation(page.Host,KeyboardNavigationMode.None);
+            }
+        }
+        void Settle(bool animate) {
+            CollapseOffset();
+            if(!animate) {SnapPages(); return;}
+            PreparePages(); int version=generation;
+            // Only the committed page can receive input after release. During
+            // preview every page is inert, including its keyboard descendants.
+            pages[selected].Host.IsHitTestVisible=true;
+            KeyboardNavigation.SetTabNavigation(pages[selected].Host,KeyboardNavigationMode.Continue);
+            Animate(ProgressProperty,selected,220,delegate {if(version==generation && !pointerPressed) SnapPages();});
         }
         void ReleasePage(Grid page,int nextIndex) {
             CloseDropDowns(page);
@@ -243,13 +253,12 @@ namespace Reswin {
             var combo=node as ComboBox; if(combo!=null) combo.IsDropDownOpen=false;
             for(int i=0;i<VisualTreeHelper.GetChildrenCount(node);i++) CloseDropDowns(VisualTreeHelper.GetChild(node,i));
         }
-        void UpdateIndicator(bool animate) {
+        void UpdateIndicator() {
             double slot=header.ActualWidth/pages.Length;
             if(slot<=0) return;
             indicator.Width=slot; indicator.Height=HeaderHeight;
             indicatorClip.Rect=new Rect(0,0,slot,HeaderHeight);
-            if(animate) Animate(indicatorPosition,TranslateTransform.XProperty,slot*selected,220,null);
-            else Set(indicatorPosition,TranslateTransform.XProperty,slot*selected);
+            UpdateMotion();
         }
         void UpdateStripGeometry() {
             double width=header.ActualWidth,slot=width/pages.Length;
@@ -304,31 +313,23 @@ namespace Reswin {
             header.Clip=geometry;
         }
         void SnapPages() {
+            generation++;
+            Set(DragOffsetProperty,0); Set(ProgressProperty,selected);
             foreach(var page in pages) {
                 bool active=page==pages[selected];
-                Set(page.Position,TranslateTransform.XProperty,0); Set(page.Host,OpacityProperty,active?1:0);
+                page.Host.Opacity=1;
                 page.Host.Visibility=active?Visibility.Visible:Visibility.Collapsed;
-                page.Host.IsHitTestVisible=active; Panel.SetZIndex(page.Host,active?1:0);
+                page.Host.IsHitTestVisible=active;
                 KeyboardNavigation.SetTabNavigation(page.Host,active?KeyboardNavigationMode.Continue:KeyboardNavigationMode.None);
             }
+            UpdateMotion();
         }
-        static void Hide(Page page) {
-            page.Host.Visibility=Visibility.Collapsed;
-            Set(page.Position,TranslateTransform.XProperty,0); Set(page.Host,OpacityProperty,0);
-        }
-        static void Set(Animatable target,DependencyProperty property,double value) {target.BeginAnimation(property,null); target.SetValue(property,value);}
-        static void Set(UIElement target,DependencyProperty property,double value) {target.BeginAnimation(property,null); target.SetValue(property,value);}
-        void Animate(Animatable target,DependencyProperty property,double value,int milliseconds,Action completed) {
-            double from=(double)target.GetValue(property); target.BeginAnimation(property,null); target.SetValue(property,value);
+        void Set(DependencyProperty property,double value) {BeginAnimation(property,null); SetValue(property,value);}
+        void Animate(DependencyProperty property,double value,int milliseconds,Action completed) {
+            double from=(double)GetValue(property); BeginAnimation(property,null); SetValue(property,value);
             var animation=new DoubleAnimation(from,value,TimeSpan.FromMilliseconds(milliseconds)) {EasingFunction=Interaction.EaseOut,FillBehavior=FillBehavior.Stop};
             if(completed!=null) animation.Completed+=delegate {completed();};
-            target.BeginAnimation(property,animation,HandoffBehavior.SnapshotAndReplace);
-        }
-        void Animate(UIElement target,DependencyProperty property,double value,int milliseconds,Action completed) {
-            double from=(double)target.GetValue(property); target.BeginAnimation(property,null); target.SetValue(property,value);
-            var animation=new DoubleAnimation(from,value,TimeSpan.FromMilliseconds(milliseconds)) {EasingFunction=Interaction.EaseOut,FillBehavior=FillBehavior.Stop};
-            if(completed!=null) animation.Completed+=delegate {completed();};
-            target.BeginAnimation(property,animation,HandoffBehavior.SnapshotAndReplace);
+            BeginAnimation(property,animation,HandoffBehavior.SnapshotAndReplace);
         }
     }
 }

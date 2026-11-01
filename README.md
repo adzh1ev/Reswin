@@ -2,7 +2,7 @@
 
 A small Windows utility that lets you move and resize windows from anywhere inside them. Hold a modifier key, then use your mouse.
 
-[Download 1.1.5](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.5) · [Русский](README.ru.md)
+[Download 1.1.6](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.6) · [Русский](README.ru.md)
 
 ## Get started
 
@@ -20,6 +20,8 @@ A small Windows utility that lets you move and resize windows from anywhere insi
 
 Release the button or modifier to end a drag. Centering respects the monitor's work area, including the taskbar.
 
+Under **Magnetism**, **Screen edges** attracts the moving window's border to any edge of the monitor work area. **Other windows** attracts it to nearby visible window borders. These switches work independently and preserve window size; pull further to detach. The pointer does not have to reach the edge for magnetism to work.
+
 Hold the selected modifier and double-click the mouse button assigned to **Move** to maximize or restore a window. To snap by dragging, move the pointer to an edge of the destination monitor and release the mouse button: the top maximizes the window, while the left and right edges place the window on that half of the work area without opening second-window suggestions. Both gestures are enabled by default and have separate switches in the top settings group.
 
 To scroll, hold **Left Alt** and move the mouse up or down. Moving further from the starting point scrolls faster; release the key to stop. If window controls use Left Alt, scrolling automatically uses **Left Ctrl** instead. Choose **— Unassigned —** under Scrolling to disable it.
@@ -31,17 +33,18 @@ Settings are split into three tabs: **Controls**, **Exclusions**, and **Settings
 - Choose **Left Ctrl** or **Left Alt** and assign each of the five buttons independently. **— Unassigned —** is the first option.
 - Turn **Snap to screen edges** and **Double-click to maximize** on or off independently. They use the mouse button assigned to Move.
 - Scrolling uses the other left modifier automatically, or can be disabled. The setting displays the actual key.
-- Adjust **Scroll sensitivity** from **25% to 200%** using the slider below Scrolling. 100% is this version's standard setting. The value is saved between launches.
+- Adjust **Scroll sensitivity** from **25% to 200%** in **5% steps** using the slider below Scrolling. 100% is this version's standard setting. The value is saved between launches.
 - Use **Enable application**, next to Start with Windows, to pause or resume window controls and scrolling.
 - Add running applications to **Exclusions** using **+**. All windows of that executable will be ignored. Remove an entry with **×**.
 - Choose a light, dark or system theme, and Russian or English.
 - Theme changes reveal from the center; language changes keep the same window and page state. Settings also offers coral and six pastel accent colors.
+- Accent choices apply immediately, without the full-window theme reveal. Switches and the sensitivity slider use borderless accent fills.
 - Enable **Close to tray** to keep Reswin running after pressing the window's close button. Disable it to exit the application with that button.
 - Enable **Start with Windows** to launch in the tray when you sign in. It stays off until you turn it on.
 
 Settings save automatically to `%LOCALAPPDATA%\Reswin\settings.xml`. Exclusions use the executable's full path; add an application again if that path changes.
 
-Closing or minimizing settings hides the window in the system tray. Double-click the tray icon to reopen it. Use the tray menu to pause or exit. A second launch opens the existing instance.
+Minimizing settings keeps the window in the taskbar. Closing hides it in the tray when **Close to tray** is enabled, or exits Reswin when disabled. Double-click the tray icon to reopen a hidden window. Use the tray menu to pause or exit. A second launch opens the existing instance.
 
 `Reswin.exe --tray` starts directly in the tray. If you move the executable after enabling startup, turn startup on again from the new location.
 
@@ -50,6 +53,8 @@ Closing or minimizing settings hides the window in the system tray. Double-click
 Windows 10/11 x64 with .NET Framework 4.8 and WPF. The application uses C#, WPF and Windows APIs, without third-party packages, a browser engine or network requests.
 
 Dragging a maximized window restores it once the pointer moves beyond the drag threshold. The two new gestures only maximize windows that support maximizing. Resize and center actions skip maximized windows. Fixed-size windows cannot be resized. Desktop, taskbar, hidden and some full-screen windows are ignored.
+
+Moving between displays preserves size adjustments made by Windows or the application for the destination display's scaling, instead of repeatedly restoring the initial pixel size.
 
 To control an application running as administrator, Reswin needs the same privilege level. Applications with custom frames, games and shared host processes may behave differently. Mixed-DPI multi-monitor setups still need hardware-specific validation.
 
@@ -66,7 +71,7 @@ To control an application running as administrator, Reswin needs the same privil
 
 ## Changes
 
-See [what changed in 1.1.5](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.5).
+See [what changed in 1.1.6](https://github.com/adzh1ev/Reswin/releases/tag/v1.1.6).
 
 ## Font and icon credits
 

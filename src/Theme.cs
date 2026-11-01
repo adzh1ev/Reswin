@@ -38,11 +38,11 @@ namespace Reswin {
    <Border Height='4' Margin='12,0,12,0' CornerRadius='2' Background='{DynamicResource LineBrush}'/>
    <Track x:Name='PART_Track' Orientation='Horizontal' IsDirectionReversed='{TemplateBinding IsDirectionReversed}' Minimum='{TemplateBinding Minimum}' Maximum='{TemplateBinding Maximum}' Value='{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}'>
     <Track.DecreaseRepeatButton><RepeatButton Focusable='False' IsTabStop='False' Command='{x:Static Slider.DecreaseLarge}'>
-     <RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Height='4' Margin='12,0,-12,0' CornerRadius='2' Background='{DynamicResource AccentBrush}' BorderBrush='{DynamicResource AccentOutlineBrush}' BorderThickness='{DynamicResource AccentOutlineThickness}'/></ControlTemplate></RepeatButton.Template>
+     <RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Height='4' Margin='12,0,-12,0' CornerRadius='2' Background='{DynamicResource AccentBrush}'/></ControlTemplate></RepeatButton.Template>
     </RepeatButton></Track.DecreaseRepeatButton>
     <Track.Thumb><Thumb Width='24' Height='28' Focusable='False' IsTabStop='False'>
      <Thumb.Template><ControlTemplate TargetType='Thumb'><Grid Background='Transparent'>
-      <Ellipse x:Name='ThumbCore' Width='14' Height='14' Fill='{DynamicResource AccentBrush}' Stroke='{DynamicResource AccentOutlineBrush}' StrokeThickness='{DynamicResource AccentOutlineWidth}' RenderTransformOrigin='0.5,0.5'>
+      <Ellipse x:Name='ThumbCore' Width='14' Height='14' Fill='{DynamicResource AccentBrush}' RenderTransformOrigin='0.5,0.5'>
        <Ellipse.RenderTransform><ScaleTransform/></Ellipse.RenderTransform>
       </Ellipse>
      </Grid></ControlTemplate></Thumb.Template>
@@ -135,7 +135,7 @@ namespace Reswin {
 <Style TargetType='CheckBox' x:Key='Switch'><Setter Property='FocusVisualStyle' Value='{x:Null}'/><Setter Property='Foreground' Value='{DynamicResource TextBrush}'/><Setter Property='Cursor' Value='Hand'/>
  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='CheckBox'><Grid Width='52' Height='32' Background='Transparent'>
   <Border Width='48' Height='28' CornerRadius='14' VerticalAlignment='Center' HorizontalAlignment='Center' Background='{DynamicResource SwitchOffBrush}'/>
-  <Border x:Name='ActiveTrack' Width='48' Height='28' CornerRadius='14' VerticalAlignment='Center' HorizontalAlignment='Center' Background='{DynamicResource AccentBrush}' BorderBrush='{DynamicResource AccentOutlineBrush}' BorderThickness='{DynamicResource AccentOutlineThickness}' Opacity='0'/>
+  <Border x:Name='ActiveTrack' Width='48' Height='28' CornerRadius='14' VerticalAlignment='Center' HorizontalAlignment='Center' Background='{DynamicResource AccentBrush}' Opacity='0'/>
   <Ellipse x:Name='Thumb' Fill='{DynamicResource SwitchThumbBrush}' Width='22' Height='22' VerticalAlignment='Center' HorizontalAlignment='Left' Margin='5,0,0,0'/>
  </Grid><ControlTemplate.Triggers><Trigger Property='IsChecked' Value='True'><Setter TargetName='Thumb' Property='Fill' Value='{DynamicResource AccentForegroundBrush}'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='0.45'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
 </Style>
@@ -183,8 +183,7 @@ namespace Reswin {
             Set(app,"AccentHoverBrush",Mix(accent,Colors.Black,0.12));
             Set(app,"AccentSoftBrush",Mix(surface,accent,dark?0.16:0.12));
             Set(app,"AccentInkBrush",ink);
-            bool outline=Contrast(accent,surface)<3;
-            Set(app,"AccentOutlineBrush",ink);
+
             Set(app,"NavigationBrush",dark?"#23272D":"#FFFFFF");
             Set(app,"NavigationHoverBrush",Mix(surface,accent,dark?0.09:0.05));
             Set(app,"PopupBrush",dark?"#292E35":"#FFFFFF");
@@ -203,10 +202,9 @@ namespace Reswin {
                 Set(app,"AccentBrush",SystemColors.HighlightColor); Set(app,"FocusBrush",SystemColors.HighlightColor);
                 Set(app,"AccentHoverBrush",SystemColors.HighlightColor); Set(app,"AccentInkBrush",SystemColors.HighlightColor);
                 Set(app,"AccentForegroundBrush",SystemColors.HighlightTextColor); Set(app,"SwitchThumbBrush",SystemColors.WindowColor);
-                Set(app,"AccentOutlineBrush",SystemColors.WindowTextColor); outline=true;
+
             }
-            app.Resources["AccentOutlineWidth"]=outline?1.0:0.0;
-            app.Resources["AccentOutlineThickness"]=new Thickness(outline?1:0);
+
             state.Dark=dark; state.HighContrast=highContrast; state.Accent=selected; state.Initialized=true;
             if(highContrast) {
                 state.Window=SystemColors.WindowColor; state.WindowText=SystemColors.WindowTextColor;

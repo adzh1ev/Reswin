@@ -1,5 +1,45 @@
 # Изменения Reswin / Reswin changelog
 
+## 1.1.6
+
+# Русский
+
+## Что нового в Reswin 1.1.6
+
+- **Перенос между мониторами с разным масштабом.** Reswin больше не возвращает исходный размер окна на каждом движении. Изменения размера и положения, выбранные Windows или самим приложением при смене DPI, сохраняются.
+- **Магнит к рамкам.** В «Управление → Примагничивание» появились два независимых переключателя: к четырём краям рабочей области экрана и к рамкам других видимых окон. Размер окна сохраняется; потяните дальше, чтобы открепить. Работает и для окна самого Reswin. Существующая привязка курсором к половине или всему экрану остаётся отдельной настройкой.
+- **Контент следует за вкладками.** При удержании и перетаскивании выделения содержимое движется вместе с ним, ещё до отпускания мыши. Отмена возвращает прежнюю вкладку.
+- **Чувствительность с шагом 5%.** Диапазон остаётся 25–200%; шаг применяется к мыши и клавиатуре.
+- **Сворачивание в панель задач.** Кнопка «Свернуть» больше не прячет окно в трей. Крестик скрывает окно в трей при включённой настройке «Сворачивать в трей», а при выключенной — полностью завершает приложение.
+- **Быстрый выбор акцента.** Цвет применяется сразу, без полного анимированного снимка окна. Обводки цветной заливки переключателей и ползунка убраны. Анимации смены темы и языка сохранены.
+- **Обновлённые иконки.** Иконка приложения стала белой с прежней формой и прозрачностью. Для «К другим окнам» используется Lucide Layout Grid, для автозапуска — Lucide Play.
+
+## Как обновиться
+
+Выйдите из старого Reswin через меню в трее, распакуйте `Reswin-portable.zip` в постоянную папку и запустите `Reswin.exe`. Настройки и чёрный список сохраняются. Новые магниты включены по умолчанию и отключаются независимо.
+
+Требования: Windows 10/11 x64 и .NET Framework 4.8. Автоматическая подстройка на разных мониторах зависит также от поддержки DPI самим приложением.
+
+---
+
+# English
+
+## What's new in Reswin 1.1.6
+
+- **Moving across displays with different scaling.** Reswin no longer restores the original window size on every move. Size and position adjustments made by Windows or the application during a DPI change are preserved.
+- **Border magnetism.** Controls → Magnetism now has two independent switches: attraction to all four screen work-area edges and to other visible window borders. Window size is preserved; pull further to detach. This also works when moving Reswin itself. Existing pointer-based half-screen placement and maximizing remain a separate option.
+- **Content follows tab dragging.** While you hold and drag the selection, page content moves with it before the mouse button is released. Cancelling returns to the previous tab.
+- **Sensitivity in 5% steps.** The range stays at 25–200%; the step applies to mouse and keyboard input.
+- **Minimize to the taskbar.** The minimize button no longer hides settings in the tray. The close button hides the window when Close to tray is enabled, or exits the application completely when disabled.
+- **Faster accent selection.** Colors apply immediately without a full-window animated snapshot. Outlines around the accent fills of switches and the slider have been removed. Theme and language transitions are preserved.
+- **Updated icons.** The application icon is now white with the same shape and transparency. Other windows uses Lucide Layout Grid; startup uses Lucide Play.
+
+## How to update
+
+Exit the old Reswin instance using the tray menu, extract `Reswin-portable.zip` to a permanent folder, and launch `Reswin.exe`. Your settings and exclusions are preserved. The new magnets are enabled by default and can be disabled independently.
+
+Requirements: Windows 10/11 x64 and .NET Framework 4.8. Automatic adjustment across displays also depends on the target application's DPI support.
+
 ## 1.1.5
 
 # Русский

@@ -18,7 +18,7 @@ namespace Reswin {
         internal event Action AdjustmentCompleted;
         internal SensitivitySlider() {
             Style=(Style)Application.Current.FindResource("SensitivitySlider");
-            SmallChange=1; LargeChange=10; TickFrequency=1; IsSnapToTickEnabled=true;
+            SmallChange=5; LargeChange=10; TickFrequency=5; IsSnapToTickEnabled=true;
             IsEnabledChanged+=delegate {
                 if(!IsEnabled) FinishDrag();
                 Feedback();
@@ -51,7 +51,8 @@ namespace Reswin {
             Point point=e.GetPosition(track); point.X-=grabOffset;
             double value=track.ValueFromPoint(point);
             if(double.IsNaN(value) || double.IsInfinity(value)) return;
-            value=Math.Max(Minimum,Math.Min(Maximum,Math.Round(value)));
+            value=Minimum+Math.Round((value-Minimum)/TickFrequency,MidpointRounding.AwayFromZero)*TickFrequency;
+            value=Math.Max(Minimum,Math.Min(Maximum,value));
             SetCurrentValue(ValueProperty,value);
         }
         protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e) {

@@ -37,6 +37,15 @@ namespace Reswin {
             internal Gesture Gesture;
             internal Native.Point Point;
         }
+        // Worker-owned state: Raw is the unmagnetized rectangle at Point, while
+        // Applied is what Windows/the target application actually accepted.
+        // This keeps native DPI sizing separate from our pointer trajectory.
+        internal sealed class MoveState {
+            internal Native.Rect Raw,Applied;
+            internal Native.Point Point;
+            internal uint Dpi;
+            internal bool RestorePending;
+        }
         internal event Action<string> Status;
         internal sealed class Gesture {
             internal IntPtr Window;
@@ -54,6 +63,8 @@ namespace Reswin {
             internal Native.Rect EdgeBounds;
             internal int EdgeDirection;
             internal WindowRequest QueuedRequest;
+            internal WindowMagnetism Magnetism;
+            internal MoveState Move;
         }
         internal WindowEngine(Settings settings,Dispatcher dispatcher) {
             this.settings=settings; this.dispatcher=dispatcher; scroll=new HoldScroll(settings,dispatcher);
@@ -334,6 +345,7 @@ namespace Reswin {
                 g.Initialized=true;
                 Native.Rect currentRect;
                 if(!Native.GetWindowRect(g.Window,out currentRect)) return;
+                Native.Rect moveOrigin=currentRect;
                 // Earlier requests can finish between this gesture's mouse-down
                 // and its first worker turn. Validate restore state against the
                 // current window, while keeping the original cursor anchor.
@@ -350,9 +362,16 @@ namespace Reswin {
                         // dimensions are used; the cursor supplies screen position.
                         normal=placement.Normal;
                     }
+                    if(arranged || maximized) {
+                        Native.ShowWindow(g.Window,9);
+                        Native.Rect restored;
+                        // A native restore may already process a DPI change.
+                        // Its accepted size wins over stale placement dimensions.
+                        if(own==null && Native.GetWindowRect(g.Window,out restored)) normal=restored;
+                    }
                     g.Origin=AnchorRestore(g.Origin,normal,g.Start);
+                    moveOrigin=g.Origin;
                     g.RestoringSideSnap=own!=null;
-                    if(arranged || maximized) Native.ShowWindow(g.Window,9);
                 } else if(g.Action==WindowAction.Center && own!=null) {
                     g.Origin=own.Normal;
                     g.RestoringSideSnap=true;
@@ -365,7 +384,14 @@ namespace Reswin {
                         g.MaxW=limits.MaxTrack.X>0?limits.MaxTrack.X:100000; g.MaxH=limits.MaxTrack.Y>0?limits.MaxTrack.Y:100000;
                     }
                 }
+                if(g.Action==WindowAction.Move) {
+                    Native.Rect moveActual;
+                    if(!Native.GetWindowRect(g.Window,out moveActual)) return;
+                    g.Move=new MoveState {Raw=moveOrigin,Applied=moveActual,Point=g.Start,
+                        Dpi=Native.WindowDpi(g.Window),RestorePending=g.RestoringSideSnap};
+                }
             }
+            if(g.Action==WindowAction.Move) {ApplyMove(g,point); return;}
             Native.Rect target=g.Origin;
             if(g.Action==WindowAction.Center) target=Geometry.Center(target,Native.Monitor(g.Window).Work);
             else {
@@ -385,6 +411,48 @@ namespace Reswin {
                 ForgetSnap(g.Window);
                 g.RestoringSideSnap=false;
             }
+        }
+        void ApplyMove(Gesture g,Native.Point point) {
+            var move=g.Move;
+            if(move==null) return;
+            Native.Rect actual;
+            if(!Native.GetWindowRect(g.Window,out actual)) return;
+            uint dpi=Native.WindowDpi(g.Window);
+            if(!move.RestorePending && (dpi!=move.Dpi || !SameRect(actual,move.Applied))) {
+                // WM_DPICHANGED may finish asynchronously between our samples.
+                // Legacy/system-aware windows can change physical size without
+                // GetDpiForWindow changing, so accepted bounds matter as well.
+                move.Raw=actual; move.Applied=actual; move.Dpi=dpi;
+                g.Magnetism=null;
+            }
+            int dx=point.X-move.Point.X,dy=point.Y-move.Point.Y;
+            var raw=new Native.Rect(move.Raw.Left+dx,move.Raw.Top+dy,move.Raw.Right+dx,move.Raw.Bottom+dy);
+            var target=raw;
+            if(settings.MagnetToScreen || settings.MagnetToWindows || g.Magnetism!=null) {
+                if(g.Magnetism==null) g.Magnetism=new WindowMagnetism(settings,ownProcess,ownIntegrity);
+                target=g.Magnetism.Adjust(g.Window,raw);
+            }
+            bool unchanged=SameRect(actual,target);
+            // Ordinary moving never resizes. Reasserting the mouse-down width
+            // after WM_DPICHANGED used to undo the application's suggested size.
+            // Only restoring our manually positioned half needs one explicit size.
+            uint flags=0x4u|0x10u|(move.RestorePending?0u:0x1u);
+            if(!unchanged && !Native.SetWindowPos(g.Window,IntPtr.Zero,target.Left,target.Top,target.Width,target.Height,flags)) return;
+            if(move.RestorePending) {
+                move.RestorePending=false; g.RestoringSideSnap=false;
+                ForgetSnap(g.Window);
+            }
+            Native.Rect applied;
+            if(!Native.GetWindowRect(g.Window,out applied)) return;
+            uint appliedDpi=Native.WindowDpi(g.Window);
+            bool nativeChange=appliedDpi!=dpi || !SameRect(applied,target);
+            // Honor both size AND suggested position. Forcing a scaled anchor
+            // back immediately can bounce the HWND across a DPI monitor seam.
+            // Normal magnet offsets stay out of Raw, retaining pull-away behavior.
+            move.Raw=nativeChange?applied:raw;
+            move.Applied=applied; move.Point=point; move.Dpi=appliedDpi;
+            if(nativeChange) g.Magnetism=null;
+            g.Dpi=appliedDpi;
         }
         static bool SameRect(Native.Rect a,Native.Rect b) {
             return a.Left==b.Left && a.Top==b.Top && a.Right==b.Right && a.Bottom==b.Bottom;

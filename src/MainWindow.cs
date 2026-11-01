@@ -26,9 +26,12 @@ namespace Reswin {
         ComboBox scrollControl;
         readonly CheckBox maximizeAtTop=new CheckBox();
         readonly CheckBox maximizeDoubleClick=new CheckBox();
+        readonly CheckBox magnetScreen=new CheckBox();
+        readonly CheckBox magnetWindows=new CheckBox();
         readonly ComboBox[] actionControls=new ComboBox[5];
-        readonly bool compact=SystemParameters.WorkArea.Height<640;
-        readonly bool tight=SystemParameters.WorkArea.Height<560;
+        readonly bool compact=SystemParameters.WorkArea.Height<760;
+        readonly bool tight=SystemParameters.WorkArea.Height<640;
+        readonly bool veryTight=SystemParameters.WorkArea.Height<560;
         TabbedNavigation navigation;
         FrameworkElement topEdgeOption,doubleClickOption;
         readonly DispatcherTimer sensitivitySaveTimer=new DispatcherTimer {Interval=TimeSpan.FromMilliseconds(220)};
@@ -45,7 +48,7 @@ namespace Reswin {
         internal MainWindow(Settings settings,Action changed,bool preview=false,int initialTab=0) {
             this.settings=settings; this.changed=changed;
             SetResourceReference(StyleProperty,typeof(Window));
-            Title="Reswin 1.1.5"; Width=500; Height=Math.Min(compact?512:576,SystemParameters.WorkArea.Height);
+            Title="Reswin 1.1.6"; Width=500; Height=Math.Min(compact?512:576,SystemParameters.WorkArea.Height);
             MinWidth=500; MinHeight=Math.Min(480,SystemParameters.WorkArea.Height);
             WindowStyle=WindowStyle.SingleBorderWindow; ResizeMode=ResizeMode.CanMinimize; WindowStartupLocation=WindowStartupLocation.CenterScreen;
             var body=new Border(); body.SetResourceReference(Border.BackgroundProperty,"BackgroundBrush"); Content=AppearanceTransition.CreateHost(body);
@@ -78,6 +81,23 @@ namespace Reswin {
             bindings.Children.Add(topEdgeOption); bindings.Children.Add(doubleClickOption);
             RefreshGestureHints();
             bindings.Children.Add(BindingDivider());
+            var magnetLabel=LocalText("Примагничивание",12,true); magnetLabel.Margin=new Thickness(4,2,0,4); bindings.Children.Add(magnetLabel);
+            magnetScreen.IsChecked=settings.MagnetToScreen; magnetWindows.IsChecked=settings.MagnetToWindows;
+            Accessible(magnetScreen,"Магнит к краям экрана"); Accessible(magnetWindows,"Магнит к окнам");
+            LocalToolTip(magnetScreen,"При перемещении рамка окна притягивается к краям рабочей области экрана без изменения размера. Потяните дальше, чтобы открепить.");
+            LocalToolTip(magnetWindows,"При перемещении рамка окна притягивается к рамкам других видимых окон без изменения размера. Потяните дальше, чтобы открепить.");
+            magnetScreen.Checked+=delegate {settings.MagnetToScreen=true; changed();};
+            magnetScreen.Unchecked+=delegate {settings.MagnetToScreen=false; changed();};
+            magnetWindows.Checked+=delegate {settings.MagnetToWindows=true; changed();};
+            magnetWindows.Unchecked+=delegate {settings.MagnetToWindows=false; changed();};
+            var screenMagnetRow=TogglePreferenceRow("К краям экрана","monitor",magnetScreen);
+            var windowMagnetRow=TogglePreferenceRow("К другим окнам","layout-grid",magnetWindows);
+            if(compact) {
+                var magnetOptions=new UniformGrid {Columns=2};
+                screenMagnetRow.Margin=new Thickness(0,0,8,0); windowMagnetRow.Margin=new Thickness(8,0,0,0);
+                magnetOptions.Children.Add(screenMagnetRow); magnetOptions.Children.Add(windowMagnetRow); bindings.Children.Add(magnetOptions);
+            } else {bindings.Children.Add(screenMagnetRow); bindings.Children.Add(windowMagnetRow);}
+            bindings.Children.Add(BindingDivider());
             scroll=new ComboBox {ItemsSource=new[]{L.T("— Без настройки —"),ScrollKeyLabel()},SelectedIndex=settings.ScrollKey==ScrollBinding.None?0:1,ToolTip=ScrollHint()};
             scrollControl=scroll;
             Interaction.AnimateDropDown(scroll); Accessible(scroll,"Прокрутка удержанием");
@@ -94,7 +114,7 @@ namespace Reswin {
             LocalToolTip(enabled,"При выключении управление окнами и прокрутка приостанавливаются.");
             enabled.Checked+=delegate {Toggle(true);}; enabled.Unchecked+=delegate {Toggle(false);};
             preferences.Children.Add(TogglePreferenceRow("Включить приложение","power",enabled));
-            var startupRow=TogglePreferenceRow("Запускать вместе с Windows","monitor",startup);
+            var startupRow=TogglePreferenceRow("Запускать вместе с Windows","play",startup);
             Accessible(startup,"Запускать Reswin вместе с Windows"); LocalToolTip(startup,"При входе в Windows запускать Reswin в трее.");
             string startupWarning=null;
             try {startup.IsChecked=!preview && Startup.Enabled;} catch(Exception e) {startupWarning=L.T("Не удалось прочитать автозапуск: ")+e.Message;}
@@ -147,7 +167,6 @@ namespace Reswin {
             };
             IsVisibleChanged+=delegate {if(!IsVisible) SaveSensitivity();};
             Closed+=delegate {SaveSensitivity(); sensitivitySaveTimer.Stop();};
-            StateChanged+=delegate {if(WindowState==WindowState.Minimized) {Hide(); WindowState=WindowState.Normal;}};
         }
         void FitHeightToControls(Border body,Grid content,Border controls) {
             if(heightFitted || navigation.ActualWidth<=0 || body.ActualHeight<=0) return;
@@ -208,7 +227,7 @@ namespace Reswin {
                 var swatch=new RadioButton {GroupName="Accent",Template=template,Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),IsChecked=string.Equals(settings.AccentColor,color,StringComparison.OrdinalIgnoreCase),Cursor=System.Windows.Input.Cursors.Hand,FocusVisualStyle=null};
                 Action relabel=delegate {swatch.ToolTip=L.T(name)+" · "+color; Theme.Accessible(swatch,L.T(name)+" "+color);};
                 relabel(); languageUpdates.Add(relabel);
-                swatch.Checked+=delegate {if(refreshingLanguage || settings.AccentColor==color) return; settings.AccentColor=color; Theme.AccentColor=color; AppearanceTransition.Run(this,delegate {Theme.Refresh(Application.Current);},true); changed();};
+                swatch.Checked+=delegate {if(refreshingLanguage || settings.AccentColor==color) return; settings.AccentColor=color; Theme.AccentColor=color; AppearanceTransition.ApplyImmediate(this,delegate {Theme.Refresh(Application.Current);}); changed();};
                 choices.Children.Add(swatch);
             }
             panel.Children.Add(choices); return panel;
@@ -227,10 +246,10 @@ namespace Reswin {
         FrameworkElement SensitivityRow() {
             settings.ScrollSensitivity=Settings.NormalizeScrollSensitivity(settings.ScrollSensitivity);
             var slider=new SensitivitySlider {Minimum=Settings.MinScrollSensitivity*100,Maximum=Settings.MaxScrollSensitivity*100,Value=settings.ScrollSensitivity*100,Height=tight?28:32};
-            string hint=L.T("Меньше — медленнее и точнее, больше — быстрее. 100% — стандартная чувствительность.");
+            string hint=L.T("Меньше — медленнее и точнее, больше — быстрее. 100% — стандартная чувствительность. Шаг — 5%.");
             Accessible(slider,"Чувствительность прокрутки");
             AutomationProperties.SetHelpText(slider,hint); slider.ToolTip=hint;
-            languageUpdates.Add(delegate {string translated=L.T("Меньше — медленнее и точнее, больше — быстрее. 100% — стандартная чувствительность."); slider.ToolTip=translated; AutomationProperties.SetHelpText(slider,translated);});
+            languageUpdates.Add(delegate {string translated=L.T("Меньше — медленнее и точнее, больше — быстрее. 100% — стандартная чувствительность. Шаг — 5%."); slider.ToolTip=translated; AutomationProperties.SetHelpText(slider,translated);});
             var value=Theme.Text(slider.Value.ToString("0",CultureInfo.InvariantCulture)+"%",12,true);
             value.FontWeight=FontWeights.Medium;
             value.TextAlignment=TextAlignment.Right; value.Width=44; value.Margin=new Thickness(2,0,0,0);
@@ -251,7 +270,7 @@ namespace Reswin {
             sensitivityDirty=false; changed();
         }
         FrameworkElement TogglePreferenceRow(string title,string icon,CheckBox control) {
-            var row=new Grid {Height=compact?36:40};
+            var row=new Grid {Height=veryTight?32:compact?36:40};
             row.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(30)});
             row.ColumnDefinitions.Add(new ColumnDefinition());
             row.ColumnDefinitions.Add(new ColumnDefinition {Width=GridLength.Auto});
@@ -275,7 +294,7 @@ namespace Reswin {
             border.SetResourceReference(Border.BackgroundProperty,"SurfaceBrush"); border.SetResourceReference(Border.BorderBrushProperty,"LineBrush"); return border;
         }
         FrameworkElement SettingRow(string label,FrameworkElement icon,FrameworkElement control) {
-            var row=new Grid { Height=tight?32:compact?34:40 };
+            var row=new Grid { Height=veryTight?28:tight?32:compact?34:40 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(30) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(146) }); row.ColumnDefinitions.Add(new ColumnDefinition());
             icon.HorizontalAlignment=HorizontalAlignment.Left; icon.VerticalAlignment=VerticalAlignment.Center; icon.Margin=new Thickness(4,0,0,0); row.Children.Add(icon);
             var text=LocalText(label,compact?13:14,false); Grid.SetColumn(text,1); row.Children.Add(text);

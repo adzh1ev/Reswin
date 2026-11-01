@@ -26,6 +26,15 @@ namespace Reswin {
             if(state==null) {state=new TransitionState(window,host); host.SetValue(StateProperty,state);}
             state.Enqueue(apply,radial);
         }
+        internal static void ApplyImmediate(Window window,Action apply) {
+            if(apply==null) throw new ArgumentNullException("apply");
+            var host=window==null?null:window.Content as AdornerDecorator;
+            if(host==null) {apply(); return;}
+            host.VerifyAccess();
+            var state=host.GetValue(StateProperty) as TransitionState;
+            if(state==null) {apply(); return;}
+            state.EnqueueImmediate(apply);
+        }
         static BitmapSource Capture(AdornerDecorator host) {
             double width=host.ActualWidth,height=host.ActualHeight;
             if(double.IsNaN(width) || double.IsInfinity(width) || double.IsNaN(height) || double.IsInfinity(height)) return null;
@@ -50,7 +59,7 @@ namespace Reswin {
             SnapshotAdorner overlay;
             Action pendingTheme,pendingLanguage;
             long sequence,themeOrder,languageOrder;
-            bool scheduled,flushing,invalidated;
+            bool scheduled,flushing,invalidated,immediatePending;
             int generation;
             internal TransitionState(Window window,AdornerDecorator host) {
                 this.window=window; this.host=host;
@@ -77,6 +86,13 @@ namespace Reswin {
                 if(!CanAnimate) Flush(false);
                 else Schedule();
             }
+            internal void EnqueueImmediate(Action apply) {
+                // Accent choices commit without a full-window capture/reveal.
+                // Retain any pending language update and discard stale pixels.
+                pendingTheme=apply; themeOrder=++sequence;
+                immediatePending=true; invalidated=true; Cancel();
+                if(!flushing) Flush(false);
+            }
             void Schedule() {
                 if(scheduled) return;
                 scheduled=true; CompositionTarget.Rendering+=Render;
@@ -99,6 +115,7 @@ namespace Reswin {
                 var theme=pendingTheme; var language=pendingLanguage;
                 long first=themeOrder,second=languageOrder;
                 pendingTheme=null; pendingLanguage=null;
+                animate=animate && !immediatePending; immediatePending=false;
                 flushing=true; invalidated=false;
                 try {
                     Size oldSize=host.RenderSize;
@@ -115,7 +132,7 @@ namespace Reswin {
                 } finally {
                     flushing=false;
                     if(HasPending) {
-                        if(CanAnimate) Schedule(); else Flush(false);
+                        if(immediatePending || !CanAnimate) Flush(false); else Schedule();
                     }
                 }
             }

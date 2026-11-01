@@ -12,6 +12,7 @@ namespace Reswin {
     public class Settings {
         public const double MinScrollSensitivity=0.25;
         public const double MaxScrollSensitivity=2.0;
+        public const double ScrollSensitivityStep=0.05;
         internal static readonly string[] AccentColors={"#D03E36","#85D9F9","#BEF5AC","#B3B27C","#FEC28F","#9FB7CC","#FDEDB1"};
         static readonly Lazy<XmlSerializer> serializer=new Lazy<XmlSerializer>(delegate {return new XmlSerializer(typeof(Settings));});
         static readonly object persistenceGate=new object();
@@ -25,13 +26,15 @@ namespace Reswin {
         public double ScrollSensitivity {get;set;}
         public bool MaximizeOnTopEdge {get;set;}
         public bool MaximizeOnDoubleClick {get;set;}
+        public bool MagnetToScreen {get;set;}
+        public bool MagnetToWindows {get;set;}
         public WindowAction Left {get;set;}
         public WindowAction Right {get;set;}
         public WindowAction Middle {get;set;}
         public WindowAction Back {get;set;}
         public WindowAction Forward {get;set;}
         public List<Exclusion> Exclusions {get;set;}
-        public Settings() { Enabled=true; Modifier=0xA2; ScrollKey=ScrollBinding.OtherModifier; ScrollSensitivity=1.0; MaximizeOnTopEdge=true; MaximizeOnDoubleClick=true; AccentColor="#D03E36"; MinimizeToTray=true; Left=WindowAction.Move; Right=WindowAction.Resize; Middle=WindowAction.Center; Back=WindowAction.Minimize; Forward=WindowAction.Maximize; Exclusions=new List<Exclusion>(); }
+        public Settings() { Enabled=true; Modifier=0xA2; ScrollKey=ScrollBinding.OtherModifier; ScrollSensitivity=1.0; MaximizeOnTopEdge=true; MaximizeOnDoubleClick=true; MagnetToScreen=true; MagnetToWindows=true; AccentColor="#D03E36"; MinimizeToTray=true; Left=WindowAction.Move; Right=WindowAction.Resize; Middle=WindowAction.Center; Back=WindowAction.Minimize; Forward=WindowAction.Maximize; Exclusions=new List<Exclusion>(); }
         internal static string NormalizeAccentColor(string value) {
             if(value!=null) {
                 value=value.Trim();
@@ -41,7 +44,8 @@ namespace Reswin {
         }
         internal static double NormalizeScrollSensitivity(double value) {
             if(double.IsNaN(value) || double.IsInfinity(value)) return 1.0;
-            return Math.Max(MinScrollSensitivity,Math.Min(MaxScrollSensitivity,value));
+            value=Math.Max(MinScrollSensitivity,Math.Min(MaxScrollSensitivity,value));
+            return Math.Round(value/ScrollSensitivityStep,MidpointRounding.AwayFromZero)*ScrollSensitivityStep;
         }
         public bool IsExcluded(string path) { return Exclusions.Exists(x=>string.Equals(x.Path,path,StringComparison.OrdinalIgnoreCase)); }
         public WindowAction Action(int button) { return button==0?Left:button==1?Right:button==2?Middle:button==3?Back:button==4?Forward:WindowAction.None; }
@@ -95,6 +99,7 @@ namespace Reswin {
         internal static bool SameBehavior(Settings a,Settings b) {
             if(a.Enabled!=b.Enabled || a.Modifier!=b.Modifier || a.ScrollKey!=b.ScrollKey || a.ScrollSensitivity!=b.ScrollSensitivity ||
                 a.MaximizeOnTopEdge!=b.MaximizeOnTopEdge || a.MaximizeOnDoubleClick!=b.MaximizeOnDoubleClick ||
+                a.MagnetToScreen!=b.MagnetToScreen || a.MagnetToWindows!=b.MagnetToWindows ||
                 a.Left!=b.Left || a.Right!=b.Right || a.Middle!=b.Middle || a.Back!=b.Back || a.Forward!=b.Forward ||
                 a.Exclusions.Count!=b.Exclusions.Count) return false;
             for(int i=0;i<a.Exclusions.Count;i++) if(!string.Equals(a.Exclusions[i].Path,b.Exclusions[i].Path,StringComparison.OrdinalIgnoreCase)) return false;

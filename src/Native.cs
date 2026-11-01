@@ -37,6 +37,7 @@ namespace Reswin {
         [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr window);
         [DllImport("user32.dll")] internal static extern IntPtr WindowFromPoint(Point point);
         [DllImport("user32.dll")] internal static extern IntPtr GetAncestor(IntPtr window,uint flags);
+        [DllImport("user32.dll")] internal static extern IntPtr GetWindow(IntPtr window,uint command);
         [DllImport("user32.dll")] internal static extern bool GetWindowRect(IntPtr window,out Rect rect);
         [DllImport("user32.dll")] internal static extern IntPtr GetWindowLongPtr(IntPtr window,int index);
         [DllImport("user32.dll")] internal static extern bool IsWindow(IntPtr window);
@@ -50,6 +51,7 @@ namespace Reswin {
         [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumProc proc,IntPtr data);
         [DllImport("user32.dll")] internal static extern IntPtr MonitorFromWindow(IntPtr window,uint flags);
         [DllImport("user32.dll")] internal static extern IntPtr MonitorFromPoint(Point point,uint flags);
+        [DllImport("user32.dll")] internal static extern IntPtr MonitorFromRect(ref Rect rect,uint flags);
         [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern bool GetMonitorInfo(IntPtr monitor,ref MonitorInfo info);
         [DllImport("user32.dll")] internal static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
         [DllImport("user32.dll",SetLastError=true)] internal static extern IntPtr SendMessageTimeout(IntPtr window,uint msg,IntPtr w,ref MinMax l,uint flags,uint timeout,out IntPtr result);
